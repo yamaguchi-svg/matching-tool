@@ -76,329 +76,321 @@ td{padding:6px 8px;border-bottom:1px solid var(--line);}
 <main id="main"></main>
 
 <script>
-const SHARED = true; // チーム全員で共有するDBとして保存します
-const MODEL = "claude-sonnet-4-6";
+/* =========================================================
+  GitHub Pages対応版（AI/APIなし・完全無料）
+  - Claude API / window.storage は使いません
+  - ブラウザの localStorage に保存します
+  - ドラPRO等の文章は正規表現で読み取ります
+========================================================= */
 
-/* ---------- ストレージ ---------- */
-async function loadKey(key, fallback){
-  try{ const r = await window.storage.get(key, SHARED); return r ? JSON.parse(r.value) : fallback; }
-  catch(e){ return fallback; }
-}
-async function saveKey(key, value){
-  try{ await window.storage.set(key, JSON.stringify(value), SHARED); }catch(e){ console.error(e); }
-}
-
-let companies = [];   // 運送会社DB(貼り付けで蓄積・毎回全件を検索対象にする)
-let candidates = [];  // 候補者(貼り付け→AI構造化して蓄積)
+let companies = [];
+let candidates = [];
 let currentTab = 'candidate';
 let selectedCandidateId = null;
-let mapsApiKey = ''; // 任意。保存はしない(その場限り)
+
+const STORAGE_KEYS = {
+  companies: 'matching_tool_companies_v2',
+  candidates: 'matching_tool_candidates_v2'
+};
 
 function uid(p){ return p + '_' + Math.random().toString(36).slice(2,8); }
 function nowISO(){ return new Date().toISOString(); }
-function isBlank(v){ return v===undefined||v===null||String(v).trim()===''; }
+function isBlank(v){ return v===undefined || v===null || String(v).trim()===''; }
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
-/* ---------- Claude API 呼び出し ---------- */
-async function callClaude(promptText){
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1000,
-      messages: [{ role: "user", content: promptText }]
-    })
-  });
-  if(!resp.ok) throw new Error('API呼び出しに失敗しました(' + resp.status + ')');
-  const data = await resp.json();
-  const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
-  return text;
+function loadLocal(key, fallback){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch(e){ console.warn(e); return fallback; }
 }
-function parseJSONLoose(text){
-  let t = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-  try{ return JSON.parse(t); }catch(e){}
-  const objMatch = t.match(/\{[\s\S]*\}/);
-  const arrMatch = t.match(/\[[\s\S]*\]/);
-  const candidate = arrMatch && (!objMatch || arrMatch.index < objMatch.index) ? arrMatch[0] : (objMatch ? objMatch[0] : null);
-  if(candidate){ return JSON.parse(candidate); }
-  throw new Error('AIの出力をJSONとして解釈できませんでした');
+function saveLocal(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); }
+  catch(e){ alert('保存に失敗しました。ブラウザの保存容量をご確認ください。'); }
 }
 
-/* ---------- 候補者テキストのAI構造化 ---------- */
-async function parseCandidateText(rawText){
-  const prompt = `あなたは日本のトラックドライバー人材紹介の実務担当者です。以下は求職者のプロフィール文章(ドラPRO等の求人媒体からの貼り付けを想定、書式は不定)です。
-この文章から求職者情報を抽出し、必ず次のキーのみを持つ1つのJSONオブジェクトだけを出力してください(前後に説明文やコードフェンスは一切付けない)。
+/* ---------- 候補者テキスト解析（AIなし） ---------- */
+function normalizeText(t){
+  return String(t||'')
+    .replace(/\r/g,'\n')
+    .replace(/[　]/g,' ')
+    .replace(/[：]/g, ':')
+    .replace(/[〜～]/g, '～')
+    .replace(/[－―ー]/g, '-');
+}
+function pickLine(text, labels){
+  const lines = normalizeText(text).split('\n').map(l=>l.trim()).filter(Boolean);
+  for(const label of labels){
+    const re = new RegExp('^[・◆◇\-\s]*' + label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*[:：]\\s*(.*)$');
+    for(const line of lines){
+      const m = line.match(re);
+      if(m) return m[1].trim();
+    }
+  }
+  return '';
+}
+function pickAfterKeyword(text, keyword){
+  const m = normalizeText(text).match(new RegExp(keyword + '\\s*[:：]?\\s*([^\\n]+)'));
+  return m ? m[1].trim() : '';
+}
+function extractAge(text){
+  const v = pickLine(text, ['年齢']);
+  if(v) return v;
+  const m = normalizeText(text).match(/(\d{2})\s*歳/);
+  return m ? m[1] + '歳' : '';
+}
+function extractCommuteMinutes(text){
+  const n = normalizeText(text);
+  let m = n.match(/(\d+)\s*分圏内/);
+  if(m) return Number(m[1]);
+  m = n.match(/車\s*(\d+)\s*分/);
+  if(m) return Number(m[1]);
+  m = n.match(/(\d+)\s*km圏内/i);
+  if(m) return Math.round(Number(m[1]) * 2); // 粗い目安
+  return null;
+}
+function extractResidence(text){
+  const v = pickLine(text, ['居住地（市区町村まで）','居住地(市区町村まで)','居住地','住所','自宅']);
+  if(v) return v.replace(/より.*$/,'').trim();
+  const n = normalizeText(text);
+  const m = n.match(/([北海道青森岩手宮城秋田山形福島茨城栃木群馬埼玉千葉東京神奈川新潟富山石川福井山梨長野岐阜静岡愛知三重滋賀京都大阪兵庫奈良和歌山鳥取島根岡山広島山口徳島香川愛媛高知福岡佐賀長崎熊本大分宮崎鹿児島沖縄][都道府県].{1,18}?[市区町村][^\n\s]*)/);
+  return m ? m[1].replace(/の自宅.*/,'').trim() : '';
+}
+function extractCommuteRaw(text){
+  const n = normalizeText(text);
+  const lines = n.split('\n').map(l=>l.trim()).filter(Boolean);
+  const line = lines.find(l => /分圏内|km圏内|通勤|自宅より|近郊|エリア|希望/.test(l) && /大阪府|京都府|兵庫県|奈良県|滋賀県|市|区|町|村|分|km/.test(l));
+  return line ? line.replace(/^◆/,'').trim() : '';
+}
+const PREFS = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+function extractPref(addr){ if(isBlank(addr)) return null; return PREFS.find(p=>String(addr).includes(p)) || null; }
+function extractCity(addr){
+  if(isBlank(addr)) return null;
+  const pref = extractPref(addr);
+  const rest = pref ? String(addr).split(pref)[1] : String(addr);
+  const m = rest.match(/(.{1,10}?[市区町村])/);
+  return m ? m[1] : null;
+}
+const NEARBY = {
+  '枚方市': ['枚方市','寝屋川市','交野市','高槻市','茨木市','摂津市','守口市','門真市','四條畷市','大東市','大阪市','吹田市','東大阪市','八幡市','京田辺市','京都市','久御山町'],
+  '寝屋川市': ['寝屋川市','枚方市','交野市','守口市','門真市','四條畷市','大東市','摂津市','高槻市','茨木市','大阪市'],
+  '大阪市': ['大阪市','東大阪市','門真市','守口市','吹田市','豊中市','摂津市','堺市','八尾市','尼崎市'],
+  '堺市': ['堺市','大阪市','松原市','高石市','和泉市','大阪狭山市','富田林市','羽曳野市']
+};
+function inferAreas(residence, commuteMin){
+  const city = extractCity(residence);
+  if(!city) return [];
+  let areas = NEARBY[city] ? [...NEARBY[city]] : [city];
+  if(commuteMin && commuteMin <= 30) areas = areas.slice(0, 8);
+  if(commuteMin && commuteMin >= 40) areas = areas.slice(0, 16);
+  return [...new Set(areas)];
+}
+function parseCandidateText(rawText){
+  const text = normalizeText(rawText);
+  const age = extractAge(text);
+  const residence = extractResidence(text);
+  const commuteRaw = extractCommuteRaw(text);
+  const commuteTimeMinutes = extractCommuteMinutes(text);
+  const licenses = pickLine(text, ['保有免許・資格','保有免許','免許・資格','免許']) || (text.match(/(普通免許[^\n、。]*)/)||[])[1] || '';
+  const experienceVehicles = pickLine(text, ['ドライバー経験','経験車種','経験']) || pickLine(text, ['ドライバー歴']);
+  const driverHistory = pickLine(text, ['ドライバー歴']);
+  const currentJob = pickLine(text, ['現職（前職）の仕事内容','現職(前職)の仕事内容','現職','前職']);
+  const income = pickLine(text, ['現在（前職）の収入','現在(前職)の収入','現在の収入','収入']);
+  const axis = pickLine(text, ['転職の軸','希望条件','希望']);
+  const jobChangeTiming = pickLine(text, ['希望の転職時期','転職希望時期']);
+  const interviewAvailability = pickLine(text, ['面接可能日程','面接可能日','面接']);
+  const cargoLine = pickAfterKeyword(text, '手積み・手降ろし') || pickAfterKeyword(text, '手積み') || pickLine(text, ['荷役']);
+  const workHours = pickLine(text, ['現在の勤務時間','勤務時間']) || (text.match(/現在の勤務時間[:：]\s*([^\n]+)/)||[])[1] || '';
 
-{
- "residence": "居住地(できるだけ具体的な住所。市区町村までは必須)",
- "commuteRaw": "通勤条件に関する原文の抜粋(例:『車40分』『30km圏内』『町田市近郊希望』など。記載なければ空文字)",
- "commutableAreas": ["通勤可能と推測される市区町村名の配列。residenceと commuteRaw から日本の地理知識を使って現実的に推測すること。特に条件記載がなければ居住地と同一市区町村および隣接市区町村を挙げる"],
- "commuteMethod": "car|train|unknown",
- "commuteTimeMinutes": 数値またはnull,
- "licenses": "保有免許(複数はカンマ区切り)",
- "experienceVehicles": "経験車種(複数はカンマ区切り)",
- "desiredJobContent": "希望する仕事内容",
- "salesOk": "可|不可|どちらでも|不明",
- "cargoOk": "可|不可|どちらでも|不明",
- "desiredHoliday": "希望休日条件",
- "desiredWorkHours": "希望勤務時間",
- "desiredSalary": "希望給与(原文のまま。例:『28万円以上』)",
- "interviewAvailability": "面接可能日程",
- "jobChangeTiming": "転職希望時期",
- "summary": "候補者を一言で要約(20文字程度)"
+  let salesOk = '不明';
+  if(/営業業務のない|営業なし|営業業務なし|営業不要/.test(axis + currentJob)) salesOk = '不可';
+  else if(/営業業務あり|営業あり/.test(axis + currentJob)) salesOk = '可';
+
+  let cargoOk = '不明';
+  if(/手積み・手降ろし[:：]?\s*可|手積み.*可|荷役.*可/.test(text)) cargoOk = '可';
+  if(/手積み・手降ろし[:：]?\s*不可|手積み.*不可|荷役.*不可/.test(text)) cargoOk = '不可';
+
+  const desiredHoliday = /休日重視|休みを優先/.test(axis) ? '休日重視（給与より休みを優先）' : '';
+  const desiredJobContent = axis || currentJob;
+  const desiredSalary = income;
+  const commutableAreas = inferAreas(residence, commuteTimeMinutes);
+  const summaryParts = [];
+  if(age) summaryParts.push(age);
+  if(residence) summaryParts.push(extractCity(residence) || residence);
+  if(licenses) summaryParts.push(licenses.replace(/\s+/g,''));
+  const summary = summaryParts.join('・') || '候補者';
+
+  return { age, residence, commuteRaw, commutableAreas, commuteMethod: /車|分圏内|自宅より/.test(text) ? 'car' : 'unknown', commuteTimeMinutes,
+    licenses, experienceVehicles, driverHistory, currentJob, desiredJobContent, salesOk, cargoOk,
+    desiredHoliday, desiredWorkHours: workHours, desiredSalary, interviewAvailability, jobChangeTiming, summary };
 }
 
-読み取れない項目は空文字("")にしてください。憶測で埋めすぎず、書かれている内容から素直に抽出してください。ただしcommutableAreasだけは地理的推測が必要なので、可能な限り現実的に埋めてください。
-
----求職者プロフィール---
-${rawText}`;
-  const text = await callClaude(prompt);
-  return parseJSONLoose(text);
-}
-
-/* ---------- 運送会社一覧のAI構造化(チャンク分割) ---------- */
-function chunkLines(raw, size){
-  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
-  const chunks = [];
-  for(let i=0;i<lines.length;i+=size) chunks.push(lines.slice(i,i+size));
-  return chunks.length ? chunks : [[raw]];
-}
-async function parseCompanyChunk(linesChunk){
-  const prompt = `あなたは日本の運送会社の求人データを整理する担当者です。以下は運送会社・拠点の一覧をスプレッドシートからコピーしたテキストです(タブまたはカンマ区切り、1行=1拠点を想定。1行目が見出し行の場合は無視してください)。
-
-各行を解析し、次のキーのみを持つオブジェクトの配列(JSON配列のみ、説明文やコードフェンスなし)を出力してください。列の意味は列名や内容から柔軟に判断してください。
-
-[{
- "companyName": "会社名",
- "baseName": "拠点名(不明ならcompanyNameと同じでよい)",
- "address": "所在地住所(必須。市区町村まで分かれば十分)",
- "jobType": "募集職種",
- "requiredLicense": "必要免許",
- "vehicleTypes": "対応車種",
- "jobContent": "仕事内容",
- "hasSalesWork": "あり|なし|不明",
- "hasCargoWork": "あり|なし|不明",
- "workHours": "勤務時間",
- "holidayCondition": "休日条件",
- "salaryCondition": "給与条件",
- "hiringMotivation": "高|中|低(記載があれば読み取り、無ければ中)"
-}]
-
-読み取れない項目は空文字にしてください。行として意味を成さない(見出しや空行)は無視してください。
-
----データ---
-${linesChunk.join('\n')}`;
-  const text = await callClaude(prompt);
-  const parsed = parseJSONLoose(text);
-  return Array.isArray(parsed) ? parsed : [parsed];
-}
-
-/* ---------- 表形式(TSV/Excel貼り付け)の直接パース: 見出しが認識できればAIを使わず高速・確実に取り込む ---------- */
+/* ---------- 運送会社一覧の取り込み ---------- */
 function parseDelimited(raw){
-  // タブ/カンマ区切り、ダブルクォートで囲まれたセル内の改行にも対応(Excelコピー形式)
   const rows = []; let field=''; let row=[]; let inQuotes=false;
   for(let i=0;i<raw.length;i++){
     const c = raw[i];
     if(inQuotes){
-      if(c==='"'){ if(raw[i+1]==='"'){ field+='"'; i++; } else { inQuotes=false; } }
+      if(c==='"'){ if(raw[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
       else field += c;
     } else {
-      if(c==='"'){ inQuotes = true; }
-      else if(c==='\t'){ row.push(field); field=''; }
-      else if(c==='\r'){ /* skip */ }
+      if(c==='"') inQuotes=true;
+      else if(c==='\t' || c===','){ row.push(field); field=''; }
+      else if(c==='\r'){}
       else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
       else field += c;
     }
   }
   row.push(field); rows.push(row);
-  return rows.filter(r=>r.some(f=>f.trim()!==''));
+  return rows.filter(r=>r.some(f=>String(f).trim()!==''));
 }
 const HEADER_ALIASES = {
-  companyName: ['クライアント名','会社名','企業名','社名'],
-  address: ['企業本社所在地','所在地','住所','本社所在地'],
+  companyName: ['クライアント名','会社名','企業名','社名','運送会社名'],
+  address: ['企業本社所在地','所在地','住所','本社所在地','勤務地','拠点住所'],
   website: ['HP','ホームページ','URL','WEBサイト','ＨＰ'],
-  baseName: ['拠点名','拠点'],
+  baseName: ['拠点名','拠点','営業所'],
   jobType: ['募集職種','職種'],
-  requiredLicense: ['必要免許','免許'],
-  vehicleTypes: ['対応車種','車種'],
-  jobContent: ['仕事内容','業務内容'],
+  requiredLicense: ['必要免許','免許','必須免許'],
+  vehicleTypes: ['対応車種','車種','トラック'],
+  jobContent: ['仕事内容','業務内容','配送内容'],
   hasSalesWork: ['営業業務','営業有無'],
-  hasCargoWork: ['荷役有無','荷役'],
-  workHours: ['勤務時間'],
-  holidayCondition: ['休日条件','休日'],
-  salaryCondition: ['給与条件','給与'],
-  hiringMotivation: ['採用意欲'],
+  hasCargoWork: ['荷役有無','荷役','手積み'],
+  workHours: ['勤務時間','時間'],
+  holidayCondition: ['休日条件','休日','休み'],
+  salaryCondition: ['給与条件','給与','月給','年収'],
+  hiringMotivation: ['採用意欲','温度感']
 };
 function detectHeaderMap(headerRow){
   const map = {};
   headerRow.forEach((h,idx)=>{
-    const hh = (h||'').trim();
-    if(!hh) return;
+    const hh = String(h||'').trim();
     for(const [key,aliases] of Object.entries(HEADER_ALIASES)){
       if(aliases.some(a=>hh.includes(a))){ map[idx]=key; break; }
     }
   });
   return map;
 }
-const INACTIVE_KEYWORDS = ['休止','解約','未入金'];
-function directParseCompanies(dataRows, headerMap){
-  const out = [];
-  for(const r of dataRows){
-    const obj = {};
-    Object.entries(headerMap).forEach(([idx,key])=>{ obj[key] = (r[idx]||'').trim(); });
-    if(isBlank(obj.companyName) && isBlank(obj.address)) continue;
-    const name = obj.companyName || '';
-    const isInactive = INACTIVE_KEYWORDS.some(k=>name.includes(k));
-    out.push({
-      companyName: name,
-      baseName: obj.baseName || name,
-      address: (obj.address||'').replace(/\s+/g,' ').trim(),
-      website: obj.website && obj.website!=='なし' ? obj.website : '',
-      jobType: obj.jobType||'', requiredLicense: obj.requiredLicense||'', vehicleTypes: obj.vehicleTypes||'',
-      jobContent: obj.jobContent||'', hasSalesWork: obj.hasSalesWork||'不明', hasCargoWork: obj.hasCargoWork||'不明',
-      workHours: obj.workHours||'', holidayCondition: obj.holidayCondition||'', salaryCondition: obj.salaryCondition||'',
-      hiringMotivation: obj.hiringMotivation||'中',
-      status: isInactive ? '無効' : '有効'
-    });
+const INACTIVE_KEYWORDS = ['休止','解約','未入金','停止','終了'];
+function normalizeCompany(row){
+  const name = row.companyName || '';
+  const inactive = INACTIVE_KEYWORDS.some(k => String(name + row.status).includes(k));
+  return {
+    companyName: name,
+    baseName: row.baseName || name,
+    address: (row.address||'').replace(/\s+/g,' ').trim(),
+    website: row.website || '',
+    jobType: row.jobType || '',
+    requiredLicense: row.requiredLicense || '',
+    vehicleTypes: row.vehicleTypes || '',
+    jobContent: row.jobContent || '',
+    hasSalesWork: row.hasSalesWork || '不明',
+    hasCargoWork: row.hasCargoWork || '不明',
+    workHours: row.workHours || '',
+    holidayCondition: row.holidayCondition || '',
+    salaryCondition: row.salaryCondition || '',
+    hiringMotivation: row.hiringMotivation || '中',
+    status: inactive ? '無効' : (row.status || '有効')
+  };
+}
+function directParseCompanies(raw){
+  const table = parseDelimited(raw);
+  if(table.length >= 2){
+    const headerMap = detectHeaderMap(table[0]);
+    const usable = Object.values(headerMap).includes('companyName') || Object.values(headerMap).includes('address');
+    if(usable){
+      return table.slice(1).map(r=>{
+        const obj = {};
+        Object.entries(headerMap).forEach(([idx,key])=> obj[key] = String(r[idx]||'').trim());
+        return normalizeCompany(obj);
+      }).filter(o=>!isBlank(o.companyName) || !isBlank(o.address));
+    }
   }
-  return out;
+  // 見出しなし・自由記述用の簡易解析
+  return normalizeText(raw).split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{
+    const parts = line.split(/\t|,/).map(s=>s.trim()).filter(Boolean);
+    const joined = parts.join(' ');
+    const addr = (joined.match(/([北海道青森岩手宮城秋田山形福島茨城栃木群馬埼玉千葉東京神奈川新潟富山石川福井山梨長野岐阜静岡愛知三重滋賀京都大阪兵庫奈良和歌山鳥取島根岡山広島山口徳島香川愛媛高知福岡佐賀長崎熊本大分宮崎鹿児島沖縄][都道府県].*)/)||[])[1] || '';
+    const companyName = parts[0] || joined.replace(addr,'').trim();
+    return normalizeCompany({ companyName, baseName: companyName, address: addr, jobContent: joined,
+      requiredLicense: (joined.match(/(普通免許|準中型|中型|大型|5t限定|8t限定)[^\s,、]*/g)||[]).join('、'),
+      vehicleTypes: (joined.match(/(軽|1\.5t|2t|3t|4t|10t|大型|中型|平|箱|ウイング|ユニック)/g)||[]).join('、'),
+      hasSalesWork: /営業/.test(joined) ? 'あり' : '不明',
+      hasCargoWork: /手積み|手降ろし|荷役/.test(joined) ? 'あり' : '不明'
+    });
+  }).filter(o=>!isBlank(o.companyName) || !isBlank(o.address));
+}
+function mergeCompanyRows(rows){
+  let added=0, updated=0;
+  for(const row of rows){
+    if(isBlank(row.companyName) && isBlank(row.address)) continue;
+    const t = nowISO();
+    const existing = companies.find(c =>
+      String(c.companyName||'').trim().toLowerCase() === String(row.companyName||'').trim().toLowerCase() &&
+      String(c.baseName||'').trim().toLowerCase() === String(row.baseName||'').trim().toLowerCase() &&
+      String(c.address||'').trim() === String(row.address||'').trim()
+    );
+    if(existing){ Object.assign(existing, row, {updatedAt:t}); updated++; }
+    else { companies.push(Object.assign({companyId:uid('C'), baseId:uid('B'), createdAt:t, updatedAt:t}, row)); added++; }
+  }
+  saveLocal(STORAGE_KEYS.companies, companies);
+  return {added, updated};
 }
 
-/* ---------- 地理ユーティリティ(市区町村レベル) ---------- */
-const PREFS = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
-function extractPref(addr){ if(isBlank(addr)) return null; for(const p of PREFS){ if(addr.includes(p)) return p; } return null; }
-function extractCity(addr){
-  if(isBlank(addr)) return null;
-  const pref = extractPref(addr);
-  const rest = pref ? addr.split(pref)[1] : addr;
-  if(!rest) return null;
-  const m = rest.match(/^(.{1,8}?[市区町村])/);
-  return m ? m[1] : null;
-}
-function splitList(str){ if(isBlank(str)) return []; return String(str).split(/[、,，・\/\s]+/).map(s=>s.trim().toLowerCase()).filter(Boolean); }
+/* ---------- マッチング計算 ---------- */
+function splitList(str){ if(isBlank(str)) return []; return String(str).toLowerCase().split(/[、,，・\/\s]+/).map(s=>s.trim()).filter(Boolean); }
 function overlaps(a,b){ return a.some(x=>b.some(y=>x.includes(y)||y.includes(x))); }
 function parseNumbersMan(str){
   if(isBlank(str)) return [];
-  const nums=[]; let m;
-  const re=/([0-9]+(?:\.[0-9]+)?)\s*万/g;
-  while((m=re.exec(str))){ nums.push(parseFloat(m[1])); }
-  if(!nums.length){ const re2=/([0-9]{5,7})/g; while((m=re2.exec(str))){ nums.push(parseFloat(m[1])/10000); } }
+  const nums=[]; let m; const s=String(str).replace(/,/g,'');
+  const re=/([0-9]+(?:\.[0-9]+)?)\s*万/g; while((m=re.exec(s))) nums.push(parseFloat(m[1]));
+  if(!nums.length){ const re2=/([0-9]{5,7})/g; while((m=re2.exec(s))) nums.push(parseFloat(m[1])/10000); }
   return nums;
 }
-
-/* ---------- 任意: Google Maps 実移動時間(APIキーがある場合のみ) ---------- */
-async function getDriveMinutes(origin, dest){
-  if(!mapsApiKey) return null;
-  try{
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(dest)}&mode=driving&key=${mapsApiKey}`;
-    const r = await fetch(url);
-    const d = await r.json();
-    const el = d.rows && d.rows[0] && d.rows[0].elements && d.rows[0].elements[0];
-    if(el && el.status==='OK'){ return Math.round(el.duration.value/60); }
-    return null;
-  }catch(e){ return null; }
-}
-
-/* ---------- マッチング計算(住所最優先) ---------- */
-async function computeAreaScore(cand, comp){
-  // Google Maps が使える場合は実移動時間を優先
-  if(mapsApiKey && !isBlank(cand.residence) && !isBlank(comp.address)){
-    const minutes = await getDriveMinutes(cand.residence, comp.address);
-    if(minutes !== null){
-      const limit = cand.commuteTimeMinutes || 60;
-      if(minutes <= limit) return {score:40, reason:`実移動時間 約${minutes}分(車)で通勤圏内`, concern:null};
-      if(minutes <= limit*1.5) return {score:22, reason:null, concern:`実移動時間 約${minutes}分でやや希望より遠い`};
-      return {score:6, reason:null, concern:`実移動時間 約${minutes}分で希望通勤時間を超過`};
-    }
-  }
-  // フォールバック: AIが推定した通勤可能エリア(市区町村)で判定
+function computeAreaScore(cand, comp){
   const compCity = extractCity(comp.address), compPref = extractPref(comp.address);
   const residPref = extractPref(cand.residence);
-  if(compCity && cand.commutableAreas && cand.commutableAreas.some(a=>a && (a.includes(compCity)||compCity.includes(a)))){
-    return {score:40, reason:`通勤可能エリア内(${compCity})`, concern:null};
-  }
-  if(compPref && residPref && compPref===residPref){
-    return {score:22, reason:`同一都道府県(${compPref})`, concern:'市区町村レベルでは離れている可能性あり(要確認)'};
-  }
-  return {score:6, reason:null, concern:'居住地から離れたエリアの可能性(要確認)'};
+  const areas = cand.commutableAreas || [];
+  if(compCity && areas.some(a=>a && (a.includes(compCity)||compCity.includes(a)))) return {score:40, reason:`通勤可能エリア内(${compCity})`, concern:null};
+  if(compPref && residPref && compPref===residPref) return {score:22, reason:`同一都道府県(${compPref})`, concern:'市区町村レベルでは距離確認が必要'};
+  return {score:6, reason:null, concern:'居住地から離れている可能性'};
 }
+function evaluatePair(cand, comp){
+  const r = {companyId:comp.companyId, baseId:comp.baseId, companyName:comp.companyName, baseName:comp.baseName, address:comp.address, score:0, matchedPoints:[], concerns:[]};
+  const area = computeAreaScore(cand, comp); r.score += area.score; if(area.reason) r.matchedPoints.push(area.reason); if(area.concern) r.concerns.push(area.concern);
 
-async function evaluatePair(cand, comp){
-  const r = {companyId:comp.companyId, baseId:comp.baseId, companyName:comp.companyName, baseName:comp.baseName, address:comp.address,
-    score:0, matchedPoints:[], concerns:[]};
+  if(isBlank(comp.requiredLicense) || isBlank(cand.licenses)){ r.score += 8; r.concerns.push('免許条件は要確認'); }
+  else if(overlaps(splitList(comp.requiredLicense), splitList(cand.licenses)) || /5t限定|準中型|普通免許/.test(comp.requiredLicense + cand.licenses)){ r.score += 20; r.matchedPoints.push('免許条件が近い'); }
+  else r.concerns.push(`免許条件不一致の可能性(必要:${comp.requiredLicense} / 保有:${cand.licenses})`);
 
-  // 住所(最優先, 40点)
-  const area = await computeAreaScore(cand, comp);
-  r.score += area.score;
-  if(area.reason) r.matchedPoints.push(area.reason);
-  if(area.concern) r.concerns.push(area.concern);
+  if(isBlank(comp.vehicleTypes) || isBlank(cand.experienceVehicles)){ r.score += 4; }
+  else if(overlaps(splitList(comp.vehicleTypes), splitList(cand.experienceVehicles))){ r.score += 10; r.matchedPoints.push('経験車種と近い'); }
+  else r.concerns.push('経験車種が一致しない可能性');
 
-  // 免許(20点, 実質必須)
-  if(isBlank(comp.requiredLicense) || isBlank(cand.licenses)){
-    r.concerns.push('免許情報が不足しているため要確認');
-    r.score += 8;
-  } else {
-    const req = splitList(comp.requiredLicense), have = splitList(cand.licenses);
-    if(overlaps(req,have)){ r.score += 20; r.matchedPoints.push('必要免許を保有'); }
-    else { r.concerns.push(`必要免許不一致(必要:${comp.requiredLicense} / 保有:${cand.licenses})`); }
-  }
+  const compText = [comp.jobContent, comp.jobType].join(' ');
+  if(/営業/.test(compText) && cand.salesOk==='不可') r.concerns.push('営業業務ありの場合は候補者希望とズレ');
+  else { r.score += 5; if(cand.salesOk==='不可') r.matchedPoints.push('営業なし希望に配慮可能そう'); }
 
-  // 車種(10点)
-  if(isBlank(comp.vehicleTypes) || isBlank(cand.experienceVehicles)){
-    r.score += 4;
-  } else {
-    const req = splitList(comp.vehicleTypes), have = splitList(cand.experienceVehicles);
-    if(overlaps(req,have)){ r.score += 10; r.matchedPoints.push('対応車種の経験あり'); }
-    else r.concerns.push('経験車種が対応車種と一致しない可能性');
-  }
+  if(/手積み|手降ろし|荷役/.test(compText + comp.hasCargoWork) && cand.cargoOk==='可'){ r.score += 5; r.matchedPoints.push('手積み・手降ろし可'); }
+  else if(cand.cargoOk==='可'){ r.score += 3; }
 
-  // 仕事内容(10点)
-  if(isBlank(comp.jobContent) || isBlank(cand.desiredJobContent)){
-    r.score += 4;
-  } else {
-    const req = splitList(comp.jobContent), have = splitList(cand.desiredJobContent);
-    if(overlaps(req,have)){ r.score += 10; r.matchedPoints.push('仕事内容が希望と一致'); }
-    else r.concerns.push('仕事内容が希望と異なる可能性');
-  }
+  if(/土日休|週休|年間休日|休日/.test(comp.holidayCondition + compText) && /休日重視|休み/.test(cand.desiredHoliday + cand.desiredJobContent)){ r.score += 8; r.matchedPoints.push('休日条件が合う可能性'); }
+  else r.score += 2;
 
-  // 営業/荷役(5点ずつ)
-  if(!isBlank(comp.hasSalesWork) && comp.hasSalesWork!=='不明' && !isBlank(cand.salesOk) && cand.salesOk!=='不明'){
-    if(comp.hasSalesWork==='あり' && cand.salesOk==='不可') r.concerns.push('営業業務ありだが候補者は不可希望');
-    else { r.score += 5; r.matchedPoints.push('営業業務条件が一致'); }
-  } else r.score += 2;
-  if(!isBlank(comp.hasCargoWork) && comp.hasCargoWork!=='不明' && !isBlank(cand.cargoOk) && cand.cargoOk!=='不明'){
-    if(comp.hasCargoWork==='あり' && cand.cargoOk==='不可') r.concerns.push('荷役ありだが候補者は不可希望');
-    else { r.score += 5; r.matchedPoints.push('荷役条件が一致'); }
-  } else r.score += 2;
-
-  // 給与(5点)
   const compNums = parseNumbersMan(comp.salaryCondition), candNums = parseNumbersMan(cand.desiredSalary);
   if(compNums.length && candNums.length){
-    const compMax = Math.max(...compNums), candMin = Math.min(...candNums);
-    if(compMax >= candMin){ r.score += 5; r.matchedPoints.push('給与条件が希望を満たす'); }
-    else r.concerns.push(`給与が希望に届かない可能性(会社最大${compMax}万/希望${candMin}万)`);
+    if(Math.max(...compNums) >= Math.min(...candNums)){ r.score += 5; r.matchedPoints.push('給与条件が近い'); }
+    else r.concerns.push('給与が現収入より下がる可能性');
   } else r.score += 2;
 
-  // 採用意欲(加点のみ)
   if(comp.hiringMotivation==='高'){ r.score += 5; r.matchedPoints.push('採用意欲が高い'); }
-  else if(comp.hiringMotivation==='低'){ r.concerns.push('採用意欲が低いため選考スピードに注意'); }
-
+  if(comp.status==='無効') r.score = 0;
   r.pct = Math.max(0, Math.min(100, Math.round(r.score)));
   r.stars = r.pct>=85?5 : r.pct>=65?4 : r.pct>=45?3 : r.pct>=25?2 : 1;
   return r;
 }
-
-async function computeMatchesFor(candidate){
-  const results = [];
-  const activeCompanies = companies.filter(c => c.status !== '無効');
-  for(const comp of activeCompanies){
-    results.push(await evaluatePair(candidate, comp));
-  }
-  results.sort((a,b)=> b.pct - a.pct);
-  return results;
+function computeMatchesFor(candidate){
+  return companies.filter(c=>c.status !== '無効').map(c=>evaluatePair(candidate,c)).sort((a,b)=>b.pct-a.pct);
 }
 
-/* ---------- UI: タブ ---------- */
+/* ---------- UI ---------- */
 const TABS = [
   {key:'candidate', label:'① 候補者を貼り付け'},
   {key:'company', label:'② 運送会社一覧を貼り付け'},
@@ -407,8 +399,7 @@ const TABS = [
 function renderNav(){
   const nav = document.getElementById('nav'); nav.innerHTML='';
   TABS.forEach(t=>{
-    const b=document.createElement('button');
-    b.textContent=t.label;
+    const b=document.createElement('button'); b.textContent=t.label;
     if(t.key==='company') b.innerHTML += `<span class="badge-count">${companies.length}件</span>`;
     if(t.key==='results') b.innerHTML += `<span class="badge-count">${candidates.length}名</span>`;
     if(t.key===currentTab) b.className='active';
@@ -416,21 +407,18 @@ function renderNav(){
     nav.appendChild(b);
   });
 }
-
-/* ---------- タブ①: 候補者貼り付け ---------- */
 function renderCandidateTab(){
   const holder = document.createElement('div');
   const panel = document.createElement('div'); panel.className='panel';
   panel.innerHTML = `
-    <label>候補者プロフィール文章を貼り付け(ドラPRO等の文章をそのまま1つのボックスに貼り付けてください)</label>
+    <label>候補者プロフィール文章を貼り付け（ドラPRO等の文章をそのまま1つのボックスに貼り付け）</label>
     <textarea id="candText" placeholder="ここに求職者のプロフィール文章を貼り付け..."></textarea>
     <div class="toolbar">
-      <button class="btn primary" id="parseBtn">AIで解析する</button>
-      <span class="hint">住所・通勤条件・免許・希望条件などをAIが自動で読み取り、通勤可能エリアも推測します。</span>
+      <button class="btn primary" id="parseBtn">解析する</button>
+      <span class="hint">AI/APIなしで、住所・通勤条件・免許・希望条件などを自動で読み取ります。</span>
     </div>
     <div class="status-line" id="candStatus"></div>
-    <div id="candPreview"></div>
-  `;
+    <div id="candPreview"></div>`;
   holder.appendChild(panel);
 
   if(candidates.length){
@@ -439,332 +427,118 @@ function renderCandidateTab(){
     const chipRow = document.createElement('div'); chipRow.className='chip-row';
     candidates.slice().reverse().forEach(c=>{
       const chip = document.createElement('div'); chip.className='chip';
-      chip.innerHTML = `${c.summary || c.candidateId} <span class="del-x" title="削除">✕</span>`;
+      chip.innerHTML = `${esc(c.summary || c.candidateId)} <span class="del-x" title="削除">✕</span>`;
       chip.querySelector('.del-x').addEventListener('click',(e)=>{ e.stopPropagation(); deleteCandidate(c.candidateId); });
       chip.addEventListener('click', ()=>{ selectedCandidateId=c.candidateId; currentTab='results'; render(); });
       chipRow.appendChild(chip);
     });
-    listPanel.appendChild(chipRow);
-    holder.appendChild(listPanel);
+    listPanel.appendChild(chipRow); holder.appendChild(listPanel);
   }
-
-  holder.querySelector('#parseBtn').addEventListener('click', async ()=>{
+  holder.querySelector('#parseBtn').addEventListener('click', ()=>{
     const raw = holder.querySelector('#candText').value.trim();
     const statusEl = holder.querySelector('#candStatus');
     if(!raw){ statusEl.textContent='テキストを貼り付けてください。'; statusEl.className='status-line error'; return; }
-    statusEl.textContent='AIが解析中です…'; statusEl.className='status-line loading';
-    holder.querySelector('#parseBtn').disabled = true;
-    try{
-      const parsed = await parseCandidateText(raw);
-      statusEl.textContent='解析が完了しました。内容を確認して登録してください。'; statusEl.className='status-line ok';
-      renderCandidatePreview(holder.querySelector('#candPreview'), parsed, raw);
-    }catch(e){
-      statusEl.textContent='解析に失敗しました: ' + e.message; statusEl.className='status-line error';
-    }
-    holder.querySelector('#parseBtn').disabled = false;
+    const parsed = parseCandidateText(raw);
+    statusEl.textContent='解析が完了しました。内容を確認して登録してください。'; statusEl.className='status-line ok';
+    renderCandidatePreview(holder.querySelector('#candPreview'), parsed, raw);
   });
-
   return holder;
 }
-
 function renderCandidatePreview(container, parsed, rawText){
-  container.innerHTML = '';
-  const p = document.createElement('div'); p.className='panel';
-  p.style.marginTop='10px';
-  p.innerHTML = `<label>AIによる読み取り結果(必要に応じて修正してから登録してください)</label>`;
-  const grid = document.createElement('div'); grid.className='field-grid';
-
-  const fields = [
-    {k:'residence', label:'居住地'},
-    {k:'commuteRaw', label:'通勤条件(原文)'},
-    {k:'commutableAreas', label:'通勤可能エリア(推測・カンマ区切り)', isArray:true},
-    {k:'licenses', label:'保有免許'},
-    {k:'experienceVehicles', label:'経験車種'},
-    {k:'desiredJobContent', label:'希望仕事内容'},
-    {k:'salesOk', label:'営業可否'},
-    {k:'cargoOk', label:'荷役可否'},
-    {k:'desiredHoliday', label:'希望休日'},
-    {k:'desiredWorkHours', label:'希望勤務時間'},
-    {k:'desiredSalary', label:'希望給与'},
-    {k:'interviewAvailability', label:'面接可能日程'},
-    {k:'jobChangeTiming', label:'転職時期'},
-  ];
-  const inputs = {};
+  container.innerHTML='';
+  const p=document.createElement('div'); p.className='panel'; p.style.marginTop='10px';
+  p.innerHTML = `<label>読み取り結果（必要に応じて修正してから登録）</label>`;
+  const grid=document.createElement('div'); grid.className='field-grid';
+  const fields=[
+    {k:'age', label:'年齢'}, {k:'residence', label:'居住地'}, {k:'commuteRaw', label:'通勤条件(原文)'},
+    {k:'commutableAreas', label:'通勤可能エリア(推測・カンマ区切り)', isArray:true}, {k:'licenses', label:'保有免許'},
+    {k:'experienceVehicles', label:'経験車種'}, {k:'driverHistory', label:'ドライバー歴'}, {k:'currentJob', label:'現職/前職'},
+    {k:'desiredJobContent', label:'希望仕事内容'}, {k:'salesOk', label:'営業可否'}, {k:'cargoOk', label:'荷役可否'},
+    {k:'desiredHoliday', label:'希望休日'}, {k:'desiredWorkHours', label:'希望勤務時間'}, {k:'desiredSalary', label:'現収入/希望給与'},
+    {k:'interviewAvailability', label:'面接可能日程'}, {k:'jobChangeTiming', label:'転職時期'} ];
+  const inputs={};
   fields.forEach(f=>{
-    const field = document.createElement('div'); field.className='field';
-    field.innerHTML = `<label>${f.label}</label>`;
-    const inp = document.createElement('input');
-    inp.value = f.isArray ? (parsed[f.k]||[]).join('、') : (parsed[f.k]||'');
-    field.appendChild(inp);
-    grid.appendChild(field);
-    inputs[f.k] = inp;
+    const field=document.createElement('div'); field.className='field'; field.innerHTML=`<label>${f.label}</label>`;
+    const inp=document.createElement('input'); inp.value = f.isArray ? (parsed[f.k]||[]).join('、') : (parsed[f.k]||'');
+    field.appendChild(inp); grid.appendChild(field); inputs[f.k]=inp;
   });
   p.appendChild(grid);
-
-  const toolbar = document.createElement('div'); toolbar.className='toolbar';
-  toolbar.innerHTML = `<button class="btn primary" id="confirmBtn">この内容で登録する</button>
-    <span class="hint">要約: ${parsed.summary||''}</span>`;
-  p.appendChild(toolbar);
-  container.appendChild(p);
-
-  p.querySelector('#confirmBtn').addEventListener('click', async ()=>{
-    const t = nowISO();
-    const cand = {
-      candidateId: uid('P'),
-      rawText,
-      residence: inputs.residence.value,
-      commuteRaw: inputs.commuteRaw.value,
-      commutableAreas: inputs.commutableAreas.value.split(/[、,]/).map(s=>s.trim()).filter(Boolean),
-      commuteMethod: parsed.commuteMethod || 'unknown',
-      commuteTimeMinutes: parsed.commuteTimeMinutes || null,
-      licenses: inputs.licenses.value,
-      experienceVehicles: inputs.experienceVehicles.value,
-      desiredJobContent: inputs.desiredJobContent.value,
-      salesOk: inputs.salesOk.value,
-      cargoOk: inputs.cargoOk.value,
-      desiredHoliday: inputs.desiredHoliday.value,
-      desiredWorkHours: inputs.desiredWorkHours.value,
-      desiredSalary: inputs.desiredSalary.value,
-      interviewAvailability: inputs.interviewAvailability.value,
-      jobChangeTiming: inputs.jobChangeTiming.value,
-      summary: parsed.summary || '',
-      createdAt: t
-    };
-    candidates.push(cand);
-    await saveKey('candidates', candidates);
-    selectedCandidateId = cand.candidateId;
-    currentTab = 'results';
-    render();
+  const toolbar=document.createElement('div'); toolbar.className='toolbar';
+  toolbar.innerHTML=`<button class="btn primary" id="confirmBtn">この内容で登録する</button><span class="hint">要約: ${esc(parsed.summary||'')}</span>`;
+  p.appendChild(toolbar); container.appendChild(p);
+  p.querySelector('#confirmBtn').addEventListener('click', ()=>{
+    const cand={ candidateId:uid('P'), rawText, createdAt:nowISO(), commuteMethod:parsed.commuteMethod||'unknown', commuteTimeMinutes:parsed.commuteTimeMinutes||null };
+    Object.keys(inputs).forEach(k=> cand[k] = k==='commutableAreas' ? inputs[k].value.split(/[、,]/).map(s=>s.trim()).filter(Boolean) : inputs[k].value);
+    cand.summary = [cand.age, extractCity(cand.residence)||cand.residence, cand.licenses].filter(Boolean).join('・') || '候補者';
+    candidates.push(cand); saveLocal(STORAGE_KEYS.candidates, candidates); selectedCandidateId=cand.candidateId; currentTab='results'; render();
   });
 }
+function deleteCandidate(id){ candidates = candidates.filter(c=>c.candidateId!==id); saveLocal(STORAGE_KEYS.candidates,candidates); render(); }
 
-async function deleteCandidate(id){
-  candidates = candidates.filter(c=>c.candidateId!==id);
-  await saveKey('candidates', candidates);
-  render();
-}
-
-/* ---------- タブ②: 運送会社一覧貼り付け ---------- */
 function renderCompanyTab(){
-  const holder = document.createElement('div');
-  const panel = document.createElement('div'); panel.className='panel';
-  panel.innerHTML = `
-    <label>運送会社一覧を貼り付け(スプレッドシートの行をそのままコピー&ペースト。1行=1拠点)</label>
-    <textarea id="compText" placeholder="スプレッドシートの内容をそのまま貼り付け..."></textarea>
+  const holder=document.createElement('div');
+  const panel=document.createElement('div'); panel.className='panel';
+  panel.innerHTML=`
+    <label>運送会社一覧を貼り付け（スプレッドシートの行をそのままコピー&ペースト。1行=1拠点）</label>
+    <textarea id="compText" placeholder="会社名・住所・免許・車種・仕事内容・休日・給与などの列を貼り付け..."></textarea>
     <div class="toolbar">
       <button class="btn primary" id="importBtn">取り込む</button>
-      <span class="hint">列の並びは自由です。会社名・拠点・住所・免許・車種・給与などをAIが自動で読み取ります。既存DBに追加され、次回以降のマッチングで毎回読み込まれます。</span>
+      <button class="btn ghost" id="clearBtn">DBを全削除</button>
+      <span class="hint">見出し行がある表は自動で列を判定します。AI/APIは使いません。</span>
     </div>
-    <div class="status-line" id="compStatus"></div>
-    <details>
-      <summary>オプション: Google Maps APIキー(実際の車移動時間を使う場合のみ)</summary>
-      <div class="field" style="margin-top:8px;"><input id="mapsKeyInput" placeholder="APIキーを入力(未入力の場合はAIによる市区町村推定を使用)" value="${mapsApiKey}"></div>
-    </details>
-  `;
+    <div class="status-line" id="compStatus"></div>`;
   holder.appendChild(panel);
-
-  const activeCount = companies.filter(c=>c.status!=='無効').length;
-  const inactiveCount = companies.length - activeCount;
-  const listPanel = document.createElement('div'); listPanel.className='panel';
-  listPanel.innerHTML = `<label style="margin-bottom:10px;">現在の運送会社DB(${companies.length}件・うちマッチング対象${activeCount}件${inactiveCount?` / 無効${inactiveCount}件`:''}・毎回全件を読み込んで検索します)</label>`;
-  if(companies.length===0){
-    listPanel.appendChild(Object.assign(document.createElement('div'),{className:'empty', textContent:'まだ会社データがありません。上のボックスに一覧を貼り付けてください。'}));
-  } else {
-    const gw = document.createElement('div'); gw.className='grid-wrap';
-    const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>状態</th><th>会社名</th><th>拠点</th><th>住所</th><th>必要免許</th><th>採用意欲</th><th>Web</th><th></th></tr></thead>`;
-    const tb = document.createElement('tbody');
+  const activeCount=companies.filter(c=>c.status!=='無効').length; const inactiveCount=companies.length-activeCount;
+  const listPanel=document.createElement('div'); listPanel.className='panel';
+  listPanel.innerHTML=`<label style="margin-bottom:10px;">現在の運送会社DB(${companies.length}件・マッチング対象${activeCount}件${inactiveCount?` / 無効${inactiveCount}件`:''})</label>`;
+  if(!companies.length){ listPanel.appendChild(Object.assign(document.createElement('div'),{className:'empty', textContent:'まだ会社データがありません。'})); }
+  else{
+    const gw=document.createElement('div'); gw.className='grid-wrap';
+    const table=document.createElement('table'); table.innerHTML='<thead><tr><th>状態</th><th>会社名</th><th>拠点</th><th>住所</th><th>必要免許</th><th>車種</th><th></th></tr></thead>';
+    const tb=document.createElement('tbody');
     companies.slice().reverse().forEach(c=>{
-      const tr = document.createElement('tr');
-      if(c.status==='無効') tr.style.opacity='0.45';
-      tr.innerHTML = `<td>${c.status==='無効' ? '<span class="tag bad">無効</span>' : '<span class="tag good">有効</span>'}</td>
-        <td>${c.companyName||''}</td><td>${c.baseName||''}</td><td>${c.address||''}</td><td>${c.requiredLicense||''}</td><td>${c.hiringMotivation||''}</td>
-        <td>${c.website ? `<a href="${c.website}" target="_blank" style="color:var(--accent);">link</a>` : ''}</td>
-        <td><button class="btn small del-x" style="color:var(--bad);">削除</button></td>`;
-      tr.querySelector('button').addEventListener('click', ()=>deleteCompany(c.companyId, c.baseId));
-      tb.appendChild(tr);
+      const tr=document.createElement('tr'); if(c.status==='無効') tr.style.opacity='0.45';
+      tr.innerHTML=`<td>${c.status==='無効'?'<span class="tag bad">無効</span>':'<span class="tag good">有効</span>'}</td><td>${esc(c.companyName)}</td><td>${esc(c.baseName)}</td><td>${esc(c.address)}</td><td>${esc(c.requiredLicense)}</td><td>${esc(c.vehicleTypes)}</td><td><button class="btn small del-x" style="color:var(--bad);">削除</button></td>`;
+      tr.querySelector('button').addEventListener('click',()=>deleteCompany(c.companyId,c.baseId)); tb.appendChild(tr);
     });
     table.appendChild(tb); gw.appendChild(table); listPanel.appendChild(gw);
   }
   holder.appendChild(listPanel);
-
-  holder.querySelector('#mapsKeyInput').addEventListener('change', (e)=>{ mapsApiKey = e.target.value.trim(); });
-
-  function mergeCompanyRows(rows){
-    let added=0, updated=0;
-    for(const row of rows){
-      if(isBlank(row.address) && isBlank(row.companyName)) continue;
-      const t = nowISO();
-      const existing = companies.find(c =>
-        (c.companyName||'').trim().toLowerCase() === (row.companyName||'').trim().toLowerCase() &&
-        (c.baseName||'').trim().toLowerCase() === (row.baseName||'').trim().toLowerCase() &&
-        (c.address||'').trim() === (row.address||'').trim()
-      );
-      if(existing){ Object.assign(existing, row, {updatedAt:t}); updated++; }
-      else { companies.push(Object.assign({companyId:uid('C'), baseId:uid('B'), createdAt:t, updatedAt:t}, row)); added++; }
-    }
-    return {added, updated};
-  }
-
-  holder.querySelector('#importBtn').addEventListener('click', async ()=>{
-    const raw = holder.querySelector('#compText').value.trim();
-    const statusEl = holder.querySelector('#compStatus');
+  holder.querySelector('#importBtn').addEventListener('click',()=>{
+    const raw=holder.querySelector('#compText').value.trim(); const statusEl=holder.querySelector('#compStatus');
     if(!raw){ statusEl.textContent='一覧を貼り付けてください。'; statusEl.className='status-line error'; return; }
-    const btn = holder.querySelector('#importBtn');
-    btn.disabled = true;
-
-    // ステップ1: 見出し付きの表形式(スプレッドシートのコピー)ならAIを使わず直接・確実に取り込む
-    const table = parseDelimited(raw);
-    const headerMap = table.length ? detectHeaderMap(table[0]) : {};
-    const hasUsableHeader = Object.values(headerMap).includes('companyName') || Object.values(headerMap).includes('address');
-
-    if(table.length >= 2 && hasUsableHeader){
-      try{
-        statusEl.textContent = '表形式のデータを検出しました。取り込み中…'; statusEl.className='status-line loading';
-        const rows = directParseCompanies(table.slice(1), headerMap);
-        const {added, updated} = mergeCompanyRows(rows);
-        await saveKey('companies', companies);
-        const inactiveCount = rows.filter(r=>r.status==='無効').length;
-        statusEl.textContent = `取り込み完了: 新規${added}件 / 更新${updated}件(合計${companies.length}件)${inactiveCount?` ※「休止」「解約」等の表記により${inactiveCount}件は無効(マッチング対象外)として登録しました`:''}`;
-        statusEl.className='status-line ok';
-        render();
-      }catch(e){
-        statusEl.textContent = '取り込みに失敗しました: ' + e.message; statusEl.className='status-line error';
-      }
-      btn.disabled = false;
-      return;
-    }
-
-    // ステップ2: 見出しが認識できない自由記述のテキストはAIで解析(1件失敗しても続行し、都度保存する)
-    try{
-      const chunks = chunkLines(raw, 4);
-      let added = 0, updated = 0, failedChunks = 0;
-      for(let i=0;i<chunks.length;i++){
-        statusEl.textContent = `AIが解析中です… (${i+1}/${chunks.length}) 新規${added}件・更新${updated}件`; statusEl.className='status-line loading';
-        try{
-          const rows = await parseCompanyChunk(chunks[i]);
-          const r = mergeCompanyRows(rows);
-          added += r.added; updated += r.updated;
-          await saveKey('companies', companies); // 都度保存し、途中で失敗しても取り込み済み分は残す
-        }catch(chunkErr){
-          failedChunks++;
-          console.error('チャンク解析失敗', chunks[i], chunkErr);
-        }
-      }
-      render();
-      if(failedChunks>0){
-        statusEl.textContent = `取り込み完了(一部失敗): 新規${added}件 / 更新${updated}件を保存しました。${failedChunks}件のブロックは解析できませんでした。`;
-        statusEl.className='status-line error';
-      } else {
-        statusEl.textContent = `取り込み完了: 新規${added}件 / 更新${updated}件(合計${companies.length}件)`;
-        statusEl.className='status-line ok';
-      }
-    }catch(e){
-      statusEl.textContent = '取り込みに失敗しました: ' + e.message; statusEl.className='status-line error';
-    }
-    btn.disabled = false;
+    const rows=directParseCompanies(raw); const r=mergeCompanyRows(rows);
+    statusEl.textContent=`取り込み完了: 新規${r.added}件 / 更新${r.updated}件（合計${companies.length}件）`; statusEl.className='status-line ok'; render();
   });
-
+  holder.querySelector('#clearBtn').addEventListener('click',()=>{ if(confirm('運送会社DBを全削除しますか？')){ companies=[]; saveLocal(STORAGE_KEYS.companies,companies); render(); } });
   return holder;
 }
-async function deleteCompany(companyId, baseId){
-  companies = companies.filter(c=>!(c.companyId===companyId && c.baseId===baseId));
-  await saveKey('companies', companies);
-  render();
-}
+function deleteCompany(companyId, baseId){ companies=companies.filter(c=>!(c.companyId===companyId&&c.baseId===baseId)); saveLocal(STORAGE_KEYS.companies,companies); render(); }
 
-/* ---------- タブ③: マッチング結果 ---------- */
-function starString(n){
-  let s='';
-  for(let i=0;i<5;i++) s += i<n ? '★' : '<span class="off">☆</span>';
-  return s;
-}
+function starString(n){ let s=''; for(let i=0;i<5;i++) s += i<n ? '★' : '<span class="off">☆</span>'; return s; }
 function renderResultsTab(){
-  const holder = document.createElement('div');
-
-  if(candidates.length===0){
-    holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'候補者が未登録です。まず「①候補者を貼り付け」タブから登録してください。'}));
-    return holder;
-  }
-  if(companies.length===0){
-    holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'運送会社DBが未登録です。「②運送会社一覧を貼り付け」タブから登録してください。'}));
-    return holder;
-  }
-  if(!selectedCandidateId) selectedCandidateId = candidates[candidates.length-1].candidateId;
-
-  const chipRow = document.createElement('div'); chipRow.className='chip-row';
-  candidates.slice().reverse().forEach(c=>{
-    const chip = document.createElement('div');
-    chip.className = 'chip' + (c.candidateId===selectedCandidateId ? ' active' : '');
-    chip.textContent = c.summary || c.candidateId;
-    chip.addEventListener('click', ()=>{ selectedCandidateId=c.candidateId; render(); });
-    chipRow.appendChild(chip);
-  });
+  const holder=document.createElement('div');
+  if(!candidates.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'候補者が未登録です。まず「①候補者を貼り付け」から登録してください。'})); return holder; }
+  if(!companies.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'運送会社DBが未登録です。「②運送会社一覧を貼り付け」から登録してください。'})); return holder; }
+  if(!selectedCandidateId) selectedCandidateId=candidates[candidates.length-1].candidateId;
+  const chipRow=document.createElement('div'); chipRow.className='chip-row';
+  candidates.slice().reverse().forEach(c=>{ const chip=document.createElement('div'); chip.className='chip'+(c.candidateId===selectedCandidateId?' active':''); chip.textContent=c.summary||c.candidateId; chip.addEventListener('click',()=>{selectedCandidateId=c.candidateId; render();}); chipRow.appendChild(chip); });
   holder.appendChild(chipRow);
-
-  const cand = candidates.find(c=>c.candidateId===selectedCandidateId);
-  const infoPanel = document.createElement('div'); infoPanel.className='panel';
-  infoPanel.innerHTML = `
-    <div style="font-weight:800; margin-bottom:6px;">${cand.summary||cand.candidateId}</div>
-    <div class="hint">居住地: ${cand.residence||'—'} ／ 通勤条件: ${cand.commuteRaw||'—'} ／ 通勤可能エリア(推測): ${(cand.commutableAreas||[]).join('、')||'—'}</div>
-  `;
+  const cand=candidates.find(c=>c.candidateId===selectedCandidateId);
+  const infoPanel=document.createElement('div'); infoPanel.className='panel';
+  infoPanel.innerHTML=`<div style="font-weight:800; margin-bottom:6px;">${esc(cand.summary||cand.candidateId)}</div><div class="hint">居住地: ${esc(cand.residence||'—')} ／ 通勤条件: ${esc(cand.commuteRaw||'—')} ／ 通勤可能エリア: ${esc((cand.commutableAreas||[]).join('、')||'—')}</div>`;
   holder.appendChild(infoPanel);
-
-  const resultsWrap = document.createElement('div');
-  resultsWrap.innerHTML = `<div class="status-line loading">運送会社DB(${companies.length}件)を読み込み、マッチ度を計算中…</div>`;
-  holder.appendChild(resultsWrap);
-
-  computeMatchesFor(cand).then(results=>{
-    resultsWrap.innerHTML = '';
-    if(results.length===0){
-      resultsWrap.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'該当する会社が見つかりませんでした。'}));
-      return;
-    }
-    results.forEach(r=>{
-      const card = document.createElement('div'); card.className='match-card';
-      card.innerHTML = `
-        <div class="head">
-          <div>
-            <div class="name">${r.companyName||'(会社名不明)'} — ${r.baseName||''}</div>
-            <div class="addr">${r.address||''}</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="stars">${starString(r.stars)}</div>
-            <div class="pct">マッチ度 ${r.pct}%</div>
-          </div>
-        </div>
-        <div class="tags">
-          ${r.matchedPoints.map(p=>`<span class="tag good">✓ ${p}</span>`).join('')}
-          ${r.concerns.map(p=>`<span class="tag warn">△ ${p}</span>`).join('')}
-        </div>
-      `;
-      resultsWrap.appendChild(card);
-    });
-  }).catch(e=>{
-    resultsWrap.innerHTML = `<div class="panel"><span class="status-line error">計算中にエラーが発生しました: ${e.message}</span></div>`;
+  const results=computeMatchesFor(cand);
+  if(!results.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'マッチング対象の会社がありません。'})); return holder; }
+  results.forEach(r=>{
+    const card=document.createElement('div'); card.className='match-card';
+    card.innerHTML=`<div class="head"><div><div class="name">${esc(r.companyName||'(会社名不明)')} — ${esc(r.baseName||'')}</div><div class="addr">${esc(r.address||'')}</div></div><div style="text-align:right;"><div class="stars">${starString(r.stars)}</div><div class="pct">マッチ度 ${r.pct}%</div></div></div><div class="tags">${r.matchedPoints.map(p=>`<span class="tag good">✓ ${esc(p)}</span>`).join('')}${r.concerns.map(p=>`<span class="tag warn">△ ${esc(p)}</span>`).join('')}</div>`;
+    holder.appendChild(card);
   });
-
   return holder;
 }
-
-/* ---------- 描画 ---------- */
-function render(){
-  renderNav();
-  const main = document.getElementById('main');
-  main.innerHTML = '';
-  let content;
-  if(currentTab==='candidate') content = renderCandidateTab();
-  else if(currentTab==='company') content = renderCompanyTab();
-  else content = renderResultsTab();
-  main.appendChild(content);
-}
-
-async function init(){
-  const [c1,c2] = await Promise.all([ loadKey('companies', []), loadKey('candidates', []) ]);
-  companies = c1 || [];
-  candidates = c2 || [];
-  render();
-}
+function render(){ renderNav(); const main=document.getElementById('main'); main.innerHTML=''; main.appendChild(currentTab==='candidate'?renderCandidateTab():currentTab==='company'?renderCompanyTab():renderResultsTab()); }
+function init(){ companies=loadLocal(STORAGE_KEYS.companies,[]); candidates=loadLocal(STORAGE_KEYS.candidates,[]); render(); }
 init();
 </script>
 </body>
