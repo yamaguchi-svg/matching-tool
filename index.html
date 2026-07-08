@@ -1,545 +1,201 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ドライバーマッチング(貼るだけ)</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ドライバーマッチング｜GitHub Pages版</title>
 <style>
-:root{
-  --bg:#12161d; --panel:#1a2029; --panel-2:#212936; --line:#2b3441;
-  --text:#e9edf3; --text-dim:#8d9bb0; --accent:#ff9f43; --accent-dim:#402d18;
-  --good:#3ddc97; --good-dim:#0f3327; --warn:#ffd166; --warn-dim:#453816;
-  --bad:#ff6b6b; --bad-dim:#3f1e1e; --mono:'SFMono-Regular',Consolas,Menlo,monospace;
-}
-*{box-sizing:border-box;}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;font-size:14px;}
-header{padding:18px 24px;border-bottom:1px solid var(--line);}
-header h1{font-size:18px;margin:0;font-weight:800;}
-header h1 span{color:var(--accent);}
-header .sub{color:var(--text-dim);font-size:12px;margin-top:4px;}
-nav{display:flex;gap:4px;padding:10px 24px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;}
-nav button{background:none;border:none;color:var(--text-dim);padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;font-weight:700;}
-nav button.active{color:var(--text);border-bottom:2px solid var(--accent);}
-main{padding:20px 24px 60px;max-width:980px;margin:0 auto;}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px;}
-textarea{width:100%;min-height:160px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:12px;font-size:13px;font-family:inherit;resize:vertical;}
-textarea:focus,input:focus,select:focus{outline:1px solid var(--accent);border-color:var(--accent);}
-input,select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:7px 9px;border-radius:6px;font-size:12.5px;width:100%;font-family:inherit;}
-label{font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px;font-weight:600;}
-.field{margin-bottom:10px;}
-.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
-button.btn{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;}
-button.btn:hover{border-color:var(--accent);}
-button.btn.primary{background:var(--accent);color:#1a1206;border-color:var(--accent);}
-button.btn.primary:disabled{opacity:.5;cursor:default;}
-button.btn.ghost{background:none;}
-button.btn.small{padding:5px 10px;font-size:11.5px;}
-.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;}
-.hint{color:var(--text-dim);font-size:11.5px;line-height:1.6;}
-.status-line{font-size:12.5px;margin-top:8px;}
-.status-line.loading{color:var(--accent);}
-.status-line.error{color:var(--bad);}
-.status-line.ok{color:var(--good);}
-details{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;}
-summary{cursor:pointer;color:var(--text-dim);font-size:12px;font-weight:700;}
-.chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
-.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:20px;padding:6px 14px;font-size:12.5px;cursor:pointer;color:var(--text-dim);}
-.chip.active{border-color:var(--accent);color:var(--accent);}
-table{border-collapse:collapse;width:100%;font-size:12px;}
-th{text-align:left;padding:7px 8px;color:var(--text-dim);border-bottom:1px solid var(--line);white-space:nowrap;}
-td{padding:6px 8px;border-bottom:1px solid var(--line);}
-.grid-wrap{overflow-x:auto;}
-.stars{color:var(--accent);letter-spacing:1px;font-size:15px;}
-.stars .off{color:#3a4353;}
-.match-card{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-bottom:10px;}
-.match-card .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
-.match-card .name{font-weight:800;font-size:14.5px;}
-.match-card .addr{color:var(--text-dim);font-size:12px;margin-top:2px;}
-.pct{font-family:var(--mono);color:var(--text-dim);font-size:11.5px;}
-.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
-.tag{font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid var(--line);}
-.tag.good{color:var(--good);background:var(--good-dim);border-color:transparent;}
-.tag.warn{color:var(--warn);background:var(--warn-dim);border-color:transparent;}
-.tag.bad{color:var(--bad);background:var(--bad-dim);border-color:transparent;}
-.empty{color:var(--text-dim);font-size:12.5px;padding:30px;text-align:center;}
-.badge-count{background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:1px 9px;font-size:11px;margin-left:4px;color:var(--text-dim);}
-.del-x{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;}
-.del-x:hover{color:var(--bad);}
+:root{--bg:#12161d;--panel:#1a2029;--panel2:#212936;--line:#2b3441;--text:#e9edf3;--dim:#8d9bb0;--accent:#ff9f43;--good:#3ddc97;--warn:#ffd166;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;font-size:14px}header{padding:18px 24px;border-bottom:1px solid var(--line)}h1{font-size:18px;margin:0}.sub{color:var(--dim);font-size:12px;margin-top:6px}main{max-width:1100px;margin:0 auto;padding:22px 24px 60px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}label{display:block;color:#9fb0c9;font-size:12px;font-weight:700;margin-bottom:6px}textarea,input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px;font-family:inherit}textarea{min-height:260px;resize:vertical;line-height:1.7}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}.field{margin-bottom:4px}.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:800}.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1206}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}.hint{color:var(--dim);font-size:12px;line-height:1.7}.ok{color:var(--good)}.warn{color:var(--warn)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.tab{padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--dim);cursor:pointer;font-weight:700}.tab.active{color:var(--accent);border-color:var(--accent)}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:var(--dim);white-space:nowrap}.tag{display:inline-block;border-radius:999px;padding:3px 8px;margin:2px;font-size:11px;background:#263140;border:1px solid var(--line)}.tag.good{color:var(--good)}.tag.warn{color:var(--warn)}.tag.bad{color:var(--bad)}.card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}.small{font-size:12px;color:var(--dim)}@media(max-width:760px){.grid{grid-template-columns:1fr}main{padding:16px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>ドライバー<span>×</span>運送会社 マッチング(貼るだけ)</h1>
-  <div class="sub">担当者の操作は2つだけ:①候補者テキストを貼り付け ②運送会社一覧を貼り付け。構造化・住所解析・マッチ度計算はAIが自動で行います。</div>
+  <h1>ドライバー×運送会社 マッチング（GitHub Pages版）</h1>
+  <div class="sub">API不要・Claude不要。ドラPRO等の文章を貼るだけで、正規表現で候補者情報を抽出します。</div>
 </header>
-<nav id="nav"></nav>
-<main id="main"></main>
+<main>
+  <div class="tabs">
+    <button class="tab active" data-tab="candidate">① 候補者を貼り付け</button>
+    <button class="tab" data-tab="company">② 運送会社一覧</button>
+    <button class="tab" data-tab="match">③ マッチング結果</button>
+  </div>
 
+  <section id="candidate" class="tabBody">
+    <div class="panel">
+      <label>候補者プロフィール文章</label>
+      <textarea id="rawCandidate" placeholder="DR-083\n・年齢：43歳\n・居住地（市区町村まで）：奈良県橿原市五条野町\n... をそのまま貼り付け"></textarea>
+      <div class="toolbar">
+        <button class="btn primary" id="parseBtn">解析する</button>
+        <button class="btn" id="clearBtn">クリア</button>
+        <span class="hint">※ブラウザ内だけで処理します。API通信はしません。</span>
+      </div>
+      <div id="parseStatus" class="hint" style="margin-top:8px"></div>
+    </div>
+    <div class="panel">
+      <label>読み取り結果（編集できます）</label>
+      <div id="candidateFields" class="grid"></div>
+      <div class="toolbar">
+        <button class="btn primary" id="saveCandidateBtn">この候補者を保存</button>
+        <button class="btn" id="copySummaryBtn">要約をコピー</button>
+      </div>
+    </div>
+    <div class="panel">
+      <label>保存済み候補者</label>
+      <div id="candidateList" class="hint">まだ保存されていません。</div>
+    </div>
+  </section>
+
+  <section id="company" class="tabBody" style="display:none">
+    <div class="panel">
+      <label>運送会社一覧（1行=1社。タブ区切り・カンマ区切り・自由記述OK）</label>
+      <textarea id="rawCompany" placeholder="会社名\t住所\t必要免許\t車種\t仕事内容\t休日\t給与\n例）山口運送\t奈良県橿原市...\t普通免許（8t限定）\t2t・4t\t地場配送\t日曜休み\t月給30万円～"></textarea>
+      <div class="toolbar">
+        <button class="btn primary" id="importCompanyBtn">取り込む</button>
+        <span class="hint">今後マッチング機能を広げやすいよう、localStorageに保存します。</span>
+      </div>
+    </div>
+    <div class="panel">
+      <label>保存済み運送会社</label>
+      <div id="companyList"></div>
+    </div>
+  </section>
+
+  <section id="match" class="tabBody" style="display:none">
+    <div class="panel">
+      <label>候補者を選択</label>
+      <select id="candidateSelect"></select>
+      <div class="toolbar"><button class="btn primary" id="matchBtn">マッチングする</button></div>
+    </div>
+    <div id="matchResults"></div>
+  </section>
+</main>
 <script>
-/* =========================================================
-  GitHub Pages対応版（AI/APIなし・完全無料）
-  - Claude API / window.storage は使いません
-  - ブラウザの localStorage に保存します
-  - ドラPRO等の文章は正規表現で読み取ります
-========================================================= */
-
-let companies = [];
-let candidates = [];
-let currentTab = 'candidate';
-let selectedCandidateId = null;
-
-const STORAGE_KEYS = {
-  companies: 'matching_tool_companies_v2',
-  candidates: 'matching_tool_candidates_v2'
-};
-
-function uid(p){ return p + '_' + Math.random().toString(36).slice(2,8); }
-function nowISO(){ return new Date().toISOString(); }
-function isBlank(v){ return v===undefined || v===null || String(v).trim()===''; }
-function esc(s){ return String(s ?? '').replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
-
-function loadLocal(key, fallback){
-  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
-  catch(e){ console.warn(e); return fallback; }
-}
-function saveLocal(key, value){
-  try{ localStorage.setItem(key, JSON.stringify(value)); }
-  catch(e){ alert('保存に失敗しました。ブラウザの保存容量をご確認ください。'); }
-}
-
-/* ---------- 候補者テキスト解析（AIなし） ---------- */
-function normalizeText(t){
-  return String(t||'')
-    .replace(/\r/g,'\n')
-    .replace(/[　]/g,' ')
-    .replace(/[：]/g, ':')
-    .replace(/[〜～]/g, '～')
-    .replace(/[－―ー]/g, '-');
-}
-function pickLine(text, labels){
-  const lines = normalizeText(text).split('\n').map(l=>l.trim()).filter(Boolean);
-  for(const label of labels){
-    const re = new RegExp('^[・◆◇\-\s]*' + label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*[:：]\\s*(.*)$');
-    for(const line of lines){
-      const m = line.match(re);
-      if(m) return m[1].trim();
-    }
-  }
-  return '';
-}
-function pickAfterKeyword(text, keyword){
-  const m = normalizeText(text).match(new RegExp(keyword + '\\s*[:：]?\\s*([^\\n]+)'));
-  return m ? m[1].trim() : '';
-}
-function extractAge(text){
-  const v = pickLine(text, ['年齢']);
-  if(v) return v;
-  const m = normalizeText(text).match(/(\d{2})\s*歳/);
-  return m ? m[1] + '歳' : '';
-}
-function extractCommuteMinutes(text){
-  const n = normalizeText(text);
-  let m = n.match(/(\d+)\s*分圏内/);
-  if(m) return Number(m[1]);
-  m = n.match(/車\s*(\d+)\s*分/);
-  if(m) return Number(m[1]);
-  m = n.match(/(\d+)\s*km圏内/i);
-  if(m) return Math.round(Number(m[1]) * 2); // 粗い目安
-  return null;
-}
-function extractResidence(text){
-  const v = pickLine(text, ['居住地（市区町村まで）','居住地(市区町村まで)','居住地','住所','自宅']);
-  if(v) return v.replace(/より.*$/,'').trim();
-  const n = normalizeText(text);
-  const m = n.match(/([北海道青森岩手宮城秋田山形福島茨城栃木群馬埼玉千葉東京神奈川新潟富山石川福井山梨長野岐阜静岡愛知三重滋賀京都大阪兵庫奈良和歌山鳥取島根岡山広島山口徳島香川愛媛高知福岡佐賀長崎熊本大分宮崎鹿児島沖縄][都道府県].{1,18}?[市区町村][^\n\s]*)/);
-  return m ? m[1].replace(/の自宅.*/,'').trim() : '';
-}
-function extractCommuteRaw(text){
-  const n = normalizeText(text);
-  const lines = n.split('\n').map(l=>l.trim()).filter(Boolean);
-  const line = lines.find(l => /分圏内|km圏内|通勤|自宅より|近郊|エリア|希望/.test(l) && /大阪府|京都府|兵庫県|奈良県|滋賀県|市|区|町|村|分|km/.test(l));
-  return line ? line.replace(/^◆/,'').trim() : '';
-}
-const PREFS = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
-function extractPref(addr){ if(isBlank(addr)) return null; return PREFS.find(p=>String(addr).includes(p)) || null; }
-function extractCity(addr){
-  if(isBlank(addr)) return null;
-  const pref = extractPref(addr);
-  const rest = pref ? String(addr).split(pref)[1] : String(addr);
-  const m = rest.match(/(.{1,10}?[市区町村])/);
-  return m ? m[1] : null;
-}
-const NEARBY = {
-  '枚方市': ['枚方市','寝屋川市','交野市','高槻市','茨木市','摂津市','守口市','門真市','四條畷市','大東市','大阪市','吹田市','東大阪市','八幡市','京田辺市','京都市','久御山町'],
-  '寝屋川市': ['寝屋川市','枚方市','交野市','守口市','門真市','四條畷市','大東市','摂津市','高槻市','茨木市','大阪市'],
-  '大阪市': ['大阪市','東大阪市','門真市','守口市','吹田市','豊中市','摂津市','堺市','八尾市','尼崎市'],
-  '堺市': ['堺市','大阪市','松原市','高石市','和泉市','大阪狭山市','富田林市','羽曳野市']
-};
-function inferAreas(residence, commuteMin){
-  const city = extractCity(residence);
-  if(!city) return [];
-  let areas = NEARBY[city] ? [...NEARBY[city]] : [city];
-  if(commuteMin && commuteMin <= 30) areas = areas.slice(0, 8);
-  if(commuteMin && commuteMin >= 40) areas = areas.slice(0, 16);
-  return [...new Set(areas)];
-}
-function parseCandidateText(rawText){
-  const text = normalizeText(rawText);
-  const age = extractAge(text);
-  const residence = extractResidence(text);
-  const commuteRaw = extractCommuteRaw(text);
-  const commuteTimeMinutes = extractCommuteMinutes(text);
-  const licenses = pickLine(text, ['保有免許・資格','保有免許','免許・資格','免許']) || (text.match(/(普通免許[^\n、。]*)/)||[])[1] || '';
-  const experienceVehicles = pickLine(text, ['ドライバー経験','経験車種','経験']) || pickLine(text, ['ドライバー歴']);
-  const driverHistory = pickLine(text, ['ドライバー歴']);
-  const currentJob = pickLine(text, ['現職（前職）の仕事内容','現職(前職)の仕事内容','現職','前職']);
-  const income = pickLine(text, ['現在（前職）の収入','現在(前職)の収入','現在の収入','収入']);
-  const axis = pickLine(text, ['転職の軸','希望条件','希望']);
-  const jobChangeTiming = pickLine(text, ['希望の転職時期','転職希望時期']);
-  const interviewAvailability = pickLine(text, ['面接可能日程','面接可能日','面接']);
-  const cargoLine = pickAfterKeyword(text, '手積み・手降ろし') || pickAfterKeyword(text, '手積み') || pickLine(text, ['荷役']);
-  const workHours = pickLine(text, ['現在の勤務時間','勤務時間']) || (text.match(/現在の勤務時間[:：]\s*([^\n]+)/)||[])[1] || '';
-
-  let salesOk = '不明';
-  if(/営業業務のない|営業なし|営業業務なし|営業不要/.test(axis + currentJob)) salesOk = '不可';
-  else if(/営業業務あり|営業あり/.test(axis + currentJob)) salesOk = '可';
-
-  let cargoOk = '不明';
-  if(/手積み・手降ろし[:：]?\s*可|手積み.*可|荷役.*可/.test(text)) cargoOk = '可';
-  if(/手積み・手降ろし[:：]?\s*不可|手積み.*不可|荷役.*不可/.test(text)) cargoOk = '不可';
-
-  const desiredHoliday = /休日重視|休みを優先/.test(axis) ? '休日重視（給与より休みを優先）' : '';
-  const desiredJobContent = axis || currentJob;
-  const desiredSalary = income;
-  const commutableAreas = inferAreas(residence, commuteTimeMinutes);
-  const summaryParts = [];
-  if(age) summaryParts.push(age);
-  if(residence) summaryParts.push(extractCity(residence) || residence);
-  if(licenses) summaryParts.push(licenses.replace(/\s+/g,''));
-  const summary = summaryParts.join('・') || '候補者';
-
-  return { age, residence, commuteRaw, commutableAreas, commuteMethod: /車|分圏内|自宅より/.test(text) ? 'car' : 'unknown', commuteTimeMinutes,
-    licenses, experienceVehicles, driverHistory, currentJob, desiredJobContent, salesOk, cargoOk,
-    desiredHoliday, desiredWorkHours: workHours, desiredSalary, interviewAvailability, jobChangeTiming, summary };
-}
-
-/* ---------- 運送会社一覧の取り込み ---------- */
-function parseDelimited(raw){
-  const rows = []; let field=''; let row=[]; let inQuotes=false;
-  for(let i=0;i<raw.length;i++){
-    const c = raw[i];
-    if(inQuotes){
-      if(c==='"'){ if(raw[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
-      else field += c;
-    } else {
-      if(c==='"') inQuotes=true;
-      else if(c==='\t' || c===','){ row.push(field); field=''; }
-      else if(c==='\r'){}
-      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
-      else field += c;
-    }
-  }
-  row.push(field); rows.push(row);
-  return rows.filter(r=>r.some(f=>String(f).trim()!==''));
-}
-const HEADER_ALIASES = {
-  companyName: ['クライアント名','会社名','企業名','社名','運送会社名'],
-  address: ['企業本社所在地','所在地','住所','本社所在地','勤務地','拠点住所'],
-  website: ['HP','ホームページ','URL','WEBサイト','ＨＰ'],
-  baseName: ['拠点名','拠点','営業所'],
-  jobType: ['募集職種','職種'],
-  requiredLicense: ['必要免許','免許','必須免許'],
-  vehicleTypes: ['対応車種','車種','トラック'],
-  jobContent: ['仕事内容','業務内容','配送内容'],
-  hasSalesWork: ['営業業務','営業有無'],
-  hasCargoWork: ['荷役有無','荷役','手積み'],
-  workHours: ['勤務時間','時間'],
-  holidayCondition: ['休日条件','休日','休み'],
-  salaryCondition: ['給与条件','給与','月給','年収'],
-  hiringMotivation: ['採用意欲','温度感']
-};
-function detectHeaderMap(headerRow){
-  const map = {};
-  headerRow.forEach((h,idx)=>{
-    const hh = String(h||'').trim();
-    for(const [key,aliases] of Object.entries(HEADER_ALIASES)){
-      if(aliases.some(a=>hh.includes(a))){ map[idx]=key; break; }
-    }
-  });
-  return map;
-}
-const INACTIVE_KEYWORDS = ['休止','解約','未入金','停止','終了'];
-function normalizeCompany(row){
-  const name = row.companyName || '';
-  const inactive = INACTIVE_KEYWORDS.some(k => String(name + row.status).includes(k));
-  return {
-    companyName: name,
-    baseName: row.baseName || name,
-    address: (row.address||'').replace(/\s+/g,' ').trim(),
-    website: row.website || '',
-    jobType: row.jobType || '',
-    requiredLicense: row.requiredLicense || '',
-    vehicleTypes: row.vehicleTypes || '',
-    jobContent: row.jobContent || '',
-    hasSalesWork: row.hasSalesWork || '不明',
-    hasCargoWork: row.hasCargoWork || '不明',
-    workHours: row.workHours || '',
-    holidayCondition: row.holidayCondition || '',
-    salaryCondition: row.salaryCondition || '',
-    hiringMotivation: row.hiringMotivation || '中',
-    status: inactive ? '無効' : (row.status || '有効')
-  };
-}
-function directParseCompanies(raw){
-  const table = parseDelimited(raw);
-  if(table.length >= 2){
-    const headerMap = detectHeaderMap(table[0]);
-    const usable = Object.values(headerMap).includes('companyName') || Object.values(headerMap).includes('address');
-    if(usable){
-      return table.slice(1).map(r=>{
-        const obj = {};
-        Object.entries(headerMap).forEach(([idx,key])=> obj[key] = String(r[idx]||'').trim());
-        return normalizeCompany(obj);
-      }).filter(o=>!isBlank(o.companyName) || !isBlank(o.address));
-    }
-  }
-  // 見出しなし・自由記述用の簡易解析
-  return normalizeText(raw).split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{
-    const parts = line.split(/\t|,/).map(s=>s.trim()).filter(Boolean);
-    const joined = parts.join(' ');
-    const addr = (joined.match(/([北海道青森岩手宮城秋田山形福島茨城栃木群馬埼玉千葉東京神奈川新潟富山石川福井山梨長野岐阜静岡愛知三重滋賀京都大阪兵庫奈良和歌山鳥取島根岡山広島山口徳島香川愛媛高知福岡佐賀長崎熊本大分宮崎鹿児島沖縄][都道府県].*)/)||[])[1] || '';
-    const companyName = parts[0] || joined.replace(addr,'').trim();
-    return normalizeCompany({ companyName, baseName: companyName, address: addr, jobContent: joined,
-      requiredLicense: (joined.match(/(普通免許|準中型|中型|大型|5t限定|8t限定)[^\s,、]*/g)||[]).join('、'),
-      vehicleTypes: (joined.match(/(軽|1\.5t|2t|3t|4t|10t|大型|中型|平|箱|ウイング|ユニック)/g)||[]).join('、'),
-      hasSalesWork: /営業/.test(joined) ? 'あり' : '不明',
-      hasCargoWork: /手積み|手降ろし|荷役/.test(joined) ? 'あり' : '不明'
-    });
-  }).filter(o=>!isBlank(o.companyName) || !isBlank(o.address));
-}
-function mergeCompanyRows(rows){
-  let added=0, updated=0;
-  for(const row of rows){
-    if(isBlank(row.companyName) && isBlank(row.address)) continue;
-    const t = nowISO();
-    const existing = companies.find(c =>
-      String(c.companyName||'').trim().toLowerCase() === String(row.companyName||'').trim().toLowerCase() &&
-      String(c.baseName||'').trim().toLowerCase() === String(row.baseName||'').trim().toLowerCase() &&
-      String(c.address||'').trim() === String(row.address||'').trim()
-    );
-    if(existing){ Object.assign(existing, row, {updatedAt:t}); updated++; }
-    else { companies.push(Object.assign({companyId:uid('C'), baseId:uid('B'), createdAt:t, updatedAt:t}, row)); added++; }
-  }
-  saveLocal(STORAGE_KEYS.companies, companies);
-  return {added, updated};
-}
-
-/* ---------- マッチング計算 ---------- */
-function splitList(str){ if(isBlank(str)) return []; return String(str).toLowerCase().split(/[、,，・\/\s]+/).map(s=>s.trim()).filter(Boolean); }
-function overlaps(a,b){ return a.some(x=>b.some(y=>x.includes(y)||y.includes(x))); }
-function parseNumbersMan(str){
-  if(isBlank(str)) return [];
-  const nums=[]; let m; const s=String(str).replace(/,/g,'');
-  const re=/([0-9]+(?:\.[0-9]+)?)\s*万/g; while((m=re.exec(s))) nums.push(parseFloat(m[1]));
-  if(!nums.length){ const re2=/([0-9]{5,7})/g; while((m=re2.exec(s))) nums.push(parseFloat(m[1])/10000); }
-  return nums;
-}
-function computeAreaScore(cand, comp){
-  const compCity = extractCity(comp.address), compPref = extractPref(comp.address);
-  const residPref = extractPref(cand.residence);
-  const areas = cand.commutableAreas || [];
-  if(compCity && areas.some(a=>a && (a.includes(compCity)||compCity.includes(a)))) return {score:40, reason:`通勤可能エリア内(${compCity})`, concern:null};
-  if(compPref && residPref && compPref===residPref) return {score:22, reason:`同一都道府県(${compPref})`, concern:'市区町村レベルでは距離確認が必要'};
-  return {score:6, reason:null, concern:'居住地から離れている可能性'};
-}
-function evaluatePair(cand, comp){
-  const r = {companyId:comp.companyId, baseId:comp.baseId, companyName:comp.companyName, baseName:comp.baseName, address:comp.address, score:0, matchedPoints:[], concerns:[]};
-  const area = computeAreaScore(cand, comp); r.score += area.score; if(area.reason) r.matchedPoints.push(area.reason); if(area.concern) r.concerns.push(area.concern);
-
-  if(isBlank(comp.requiredLicense) || isBlank(cand.licenses)){ r.score += 8; r.concerns.push('免許条件は要確認'); }
-  else if(overlaps(splitList(comp.requiredLicense), splitList(cand.licenses)) || /5t限定|準中型|普通免許/.test(comp.requiredLicense + cand.licenses)){ r.score += 20; r.matchedPoints.push('免許条件が近い'); }
-  else r.concerns.push(`免許条件不一致の可能性(必要:${comp.requiredLicense} / 保有:${cand.licenses})`);
-
-  if(isBlank(comp.vehicleTypes) || isBlank(cand.experienceVehicles)){ r.score += 4; }
-  else if(overlaps(splitList(comp.vehicleTypes), splitList(cand.experienceVehicles))){ r.score += 10; r.matchedPoints.push('経験車種と近い'); }
-  else r.concerns.push('経験車種が一致しない可能性');
-
-  const compText = [comp.jobContent, comp.jobType].join(' ');
-  if(/営業/.test(compText) && cand.salesOk==='不可') r.concerns.push('営業業務ありの場合は候補者希望とズレ');
-  else { r.score += 5; if(cand.salesOk==='不可') r.matchedPoints.push('営業なし希望に配慮可能そう'); }
-
-  if(/手積み|手降ろし|荷役/.test(compText + comp.hasCargoWork) && cand.cargoOk==='可'){ r.score += 5; r.matchedPoints.push('手積み・手降ろし可'); }
-  else if(cand.cargoOk==='可'){ r.score += 3; }
-
-  if(/土日休|週休|年間休日|休日/.test(comp.holidayCondition + compText) && /休日重視|休み/.test(cand.desiredHoliday + cand.desiredJobContent)){ r.score += 8; r.matchedPoints.push('休日条件が合う可能性'); }
-  else r.score += 2;
-
-  const compNums = parseNumbersMan(comp.salaryCondition), candNums = parseNumbersMan(cand.desiredSalary);
-  if(compNums.length && candNums.length){
-    if(Math.max(...compNums) >= Math.min(...candNums)){ r.score += 5; r.matchedPoints.push('給与条件が近い'); }
-    else r.concerns.push('給与が現収入より下がる可能性');
-  } else r.score += 2;
-
-  if(comp.hiringMotivation==='高'){ r.score += 5; r.matchedPoints.push('採用意欲が高い'); }
-  if(comp.status==='無効') r.score = 0;
-  r.pct = Math.max(0, Math.min(100, Math.round(r.score)));
-  r.stars = r.pct>=85?5 : r.pct>=65?4 : r.pct>=45?3 : r.pct>=25?2 : 1;
-  return r;
-}
-function computeMatchesFor(candidate){
-  return companies.filter(c=>c.status !== '無効').map(c=>evaluatePair(candidate,c)).sort((a,b)=>b.pct-a.pct);
-}
-
-/* ---------- UI ---------- */
-const TABS = [
-  {key:'candidate', label:'① 候補者を貼り付け'},
-  {key:'company', label:'② 運送会社一覧を貼り付け'},
-  {key:'results', label:'マッチング結果'},
+const LS_CAND='mt_candidates_v2', LS_COMP='mt_companies_v2';
+const candidateKeys=[
+ ['id','候補者ID'],['age','年齢'],['residence','居住地'],['commuteMethod','通勤手段'],['commuteRaw','希望勤務地・通勤条件'],['commuteMinutes','通勤希望時間(分)'],['desiredArea','希望エリア'],['driverExperience','ドライバー経験'],['licenses','保有免許・資格'],['currentJob','現職/前職仕事内容'],['currentIncome','現在/前職収入'],['desiredSalary','希望給与'],['desiredHoliday','希望休日'],['desiredWorkHours','希望勤務時間'],['desiredJob','希望仕事内容/転職軸'],['cargoOk','手積み・手降ろし'],['longDistance','長距離'],['jobChangeTiming','転職時期'],['interviewAvailability','面接可能日程'],['other','その他'],['summary','要約']
 ];
-function renderNav(){
-  const nav = document.getElementById('nav'); nav.innerHTML='';
-  TABS.forEach(t=>{
-    const b=document.createElement('button'); b.textContent=t.label;
-    if(t.key==='company') b.innerHTML += `<span class="badge-count">${companies.length}件</span>`;
-    if(t.key==='results') b.innerHTML += `<span class="badge-count">${candidates.length}名</span>`;
-    if(t.key===currentTab) b.className='active';
-    b.addEventListener('click', ()=>{ currentTab=t.key; render(); });
-    nav.appendChild(b);
-  });
+let candidates=load(LS_CAND), companies=load(LS_COMP), currentCandidate={};
+function load(k){try{return JSON.parse(localStorage.getItem(k)||'[]')}catch(e){return[]}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function val(v){return (v||'').toString().trim()}
+function esc(s){return val(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function lineValue(text,label){
+ const re=new RegExp('(?:^|\\n)[\\s・　-]*'+label+'(?:（[^）]*）)?[：:]\\s*([^\\n]+)','m');
+ const m=text.match(re); return m?val(m[1]):'';
 }
-function renderCandidateTab(){
-  const holder = document.createElement('div');
-  const panel = document.createElement('div'); panel.className='panel';
-  panel.innerHTML = `
-    <label>候補者プロフィール文章を貼り付け（ドラPRO等の文章をそのまま1つのボックスに貼り付け）</label>
-    <textarea id="candText" placeholder="ここに求職者のプロフィール文章を貼り付け..."></textarea>
-    <div class="toolbar">
-      <button class="btn primary" id="parseBtn">解析する</button>
-      <span class="hint">AI/APIなしで、住所・通勤条件・免許・希望条件などを自動で読み取ります。</span>
-    </div>
-    <div class="status-line" id="candStatus"></div>
-    <div id="candPreview"></div>`;
-  holder.appendChild(panel);
-
-  if(candidates.length){
-    const listPanel = document.createElement('div'); listPanel.className='panel';
-    listPanel.innerHTML = `<label style="margin-bottom:10px;">登録済み候補者(${candidates.length}名)</label>`;
-    const chipRow = document.createElement('div'); chipRow.className='chip-row';
-    candidates.slice().reverse().forEach(c=>{
-      const chip = document.createElement('div'); chip.className='chip';
-      chip.innerHTML = `${esc(c.summary || c.candidateId)} <span class="del-x" title="削除">✕</span>`;
-      chip.querySelector('.del-x').addEventListener('click',(e)=>{ e.stopPropagation(); deleteCandidate(c.candidateId); });
-      chip.addEventListener('click', ()=>{ selectedCandidateId=c.candidateId; currentTab='results'; render(); });
-      chipRow.appendChild(chip);
-    });
-    listPanel.appendChild(chipRow); holder.appendChild(listPanel);
-  }
-  holder.querySelector('#parseBtn').addEventListener('click', ()=>{
-    const raw = holder.querySelector('#candText').value.trim();
-    const statusEl = holder.querySelector('#candStatus');
-    if(!raw){ statusEl.textContent='テキストを貼り付けてください。'; statusEl.className='status-line error'; return; }
-    const parsed = parseCandidateText(raw);
-    statusEl.textContent='解析が完了しました。内容を確認して登録してください。'; statusEl.className='status-line ok';
-    renderCandidatePreview(holder.querySelector('#candPreview'), parsed, raw);
-  });
-  return holder;
+function blockAfter(text,label){
+ const re=new RegExp('(?:^|\\n)[\\s・　-]*'+label+'[：:]?\\s*([\\s\\S]*?)(?=\\n[\\s・]*[ぁ-んァ-ン一-龥A-Za-z0-9（）()・／/]+[：:]|$)','m');
+ const m=text.match(re); return m?val(m[1].replace(/^[-　\s]+/gm,'').replace(/\n+/g,' / ')):'';
 }
-function renderCandidatePreview(container, parsed, rawText){
-  container.innerHTML='';
-  const p=document.createElement('div'); p.className='panel'; p.style.marginTop='10px';
-  p.innerHTML = `<label>読み取り結果（必要に応じて修正してから登録）</label>`;
-  const grid=document.createElement('div'); grid.className='field-grid';
-  const fields=[
-    {k:'age', label:'年齢'}, {k:'residence', label:'居住地'}, {k:'commuteRaw', label:'通勤条件(原文)'},
-    {k:'commutableAreas', label:'通勤可能エリア(推測・カンマ区切り)', isArray:true}, {k:'licenses', label:'保有免許'},
-    {k:'experienceVehicles', label:'経験車種'}, {k:'driverHistory', label:'ドライバー歴'}, {k:'currentJob', label:'現職/前職'},
-    {k:'desiredJobContent', label:'希望仕事内容'}, {k:'salesOk', label:'営業可否'}, {k:'cargoOk', label:'荷役可否'},
-    {k:'desiredHoliday', label:'希望休日'}, {k:'desiredWorkHours', label:'希望勤務時間'}, {k:'desiredSalary', label:'現収入/希望給与'},
-    {k:'interviewAvailability', label:'面接可能日程'}, {k:'jobChangeTiming', label:'転職時期'} ];
-  const inputs={};
-  fields.forEach(f=>{
-    const field=document.createElement('div'); field.className='field'; field.innerHTML=`<label>${f.label}</label>`;
-    const inp=document.createElement('input'); inp.value = f.isArray ? (parsed[f.k]||[]).join('、') : (parsed[f.k]||'');
-    field.appendChild(inp); grid.appendChild(field); inputs[f.k]=inp;
-  });
-  p.appendChild(grid);
-  const toolbar=document.createElement('div'); toolbar.className='toolbar';
-  toolbar.innerHTML=`<button class="btn primary" id="confirmBtn">この内容で登録する</button><span class="hint">要約: ${esc(parsed.summary||'')}</span>`;
-  p.appendChild(toolbar); container.appendChild(p);
-  p.querySelector('#confirmBtn').addEventListener('click', ()=>{
-    const cand={ candidateId:uid('P'), rawText, createdAt:nowISO(), commuteMethod:parsed.commuteMethod||'unknown', commuteTimeMinutes:parsed.commuteTimeMinutes||null };
-    Object.keys(inputs).forEach(k=> cand[k] = k==='commutableAreas' ? inputs[k].value.split(/[、,]/).map(s=>s.trim()).filter(Boolean) : inputs[k].value);
-    cand.summary = [cand.age, extractCity(cand.residence)||cand.residence, cand.licenses].filter(Boolean).join('・') || '候補者';
-    candidates.push(cand); saveLocal(STORAGE_KEYS.candidates, candidates); selectedCandidateId=cand.candidateId; currentTab='results'; render();
-  });
+function firstMatch(text,regs){for(const r of regs){const m=text.match(r); if(m)return val(m[1]||m[0])} return ''}
+function parseMinutes(text){
+ const m=text.match(/(\d+)\s*[～〜~－-]\s*(\d+)\s*分/); if(m)return m[2];
+ const m2=text.match(/(\d+)\s*分圏内/); if(m2)return m2[1];
+ return '';
 }
-function deleteCandidate(id){ candidates = candidates.filter(c=>c.candidateId!==id); saveLocal(STORAGE_KEYS.candidates,candidates); render(); }
-
-function renderCompanyTab(){
-  const holder=document.createElement('div');
-  const panel=document.createElement('div'); panel.className='panel';
-  panel.innerHTML=`
-    <label>運送会社一覧を貼り付け（スプレッドシートの行をそのままコピー&ペースト。1行=1拠点）</label>
-    <textarea id="compText" placeholder="会社名・住所・免許・車種・仕事内容・休日・給与などの列を貼り付け..."></textarea>
-    <div class="toolbar">
-      <button class="btn primary" id="importBtn">取り込む</button>
-      <button class="btn ghost" id="clearBtn">DBを全削除</button>
-      <span class="hint">見出し行がある表は自動で列を判定します。AI/APIは使いません。</span>
-    </div>
-    <div class="status-line" id="compStatus"></div>`;
-  holder.appendChild(panel);
-  const activeCount=companies.filter(c=>c.status!=='無効').length; const inactiveCount=companies.length-activeCount;
-  const listPanel=document.createElement('div'); listPanel.className='panel';
-  listPanel.innerHTML=`<label style="margin-bottom:10px;">現在の運送会社DB(${companies.length}件・マッチング対象${activeCount}件${inactiveCount?` / 無効${inactiveCount}件`:''})</label>`;
-  if(!companies.length){ listPanel.appendChild(Object.assign(document.createElement('div'),{className:'empty', textContent:'まだ会社データがありません。'})); }
-  else{
-    const gw=document.createElement('div'); gw.className='grid-wrap';
-    const table=document.createElement('table'); table.innerHTML='<thead><tr><th>状態</th><th>会社名</th><th>拠点</th><th>住所</th><th>必要免許</th><th>車種</th><th></th></tr></thead>';
-    const tb=document.createElement('tbody');
-    companies.slice().reverse().forEach(c=>{
-      const tr=document.createElement('tr'); if(c.status==='無効') tr.style.opacity='0.45';
-      tr.innerHTML=`<td>${c.status==='無効'?'<span class="tag bad">無効</span>':'<span class="tag good">有効</span>'}</td><td>${esc(c.companyName)}</td><td>${esc(c.baseName)}</td><td>${esc(c.address)}</td><td>${esc(c.requiredLicense)}</td><td>${esc(c.vehicleTypes)}</td><td><button class="btn small del-x" style="color:var(--bad);">削除</button></td>`;
-      tr.querySelector('button').addEventListener('click',()=>deleteCompany(c.companyId,c.baseId)); tb.appendChild(tr);
-    });
-    table.appendChild(tb); gw.appendChild(table); listPanel.appendChild(gw);
-  }
-  holder.appendChild(listPanel);
-  holder.querySelector('#importBtn').addEventListener('click',()=>{
-    const raw=holder.querySelector('#compText').value.trim(); const statusEl=holder.querySelector('#compStatus');
-    if(!raw){ statusEl.textContent='一覧を貼り付けてください。'; statusEl.className='status-line error'; return; }
-    const rows=directParseCompanies(raw); const r=mergeCompanyRows(rows);
-    statusEl.textContent=`取り込み完了: 新規${r.added}件 / 更新${r.updated}件（合計${companies.length}件）`; statusEl.className='status-line ok'; render();
-  });
-  holder.querySelector('#clearBtn').addEventListener('click',()=>{ if(confirm('運送会社DBを全削除しますか？')){ companies=[]; saveLocal(STORAGE_KEYS.companies,companies); render(); } });
-  return holder;
+function parseCandidate(text){
+ const axis=blockAfter(text,'転職の軸') || lineValue(text,'転職の軸');
+ const other=blockAfter(text,'その他');
+ const rawComm=lineValue(text,'希望勤務地') || firstMatch(text,[/自宅から[^\n。]+/]);
+ const desiredSalary=firstMatch(text,[/年収\s*([0-9]+\s*万円程度?)/,/額面月収\s*([0-9]+\s*万円)/,/月収\s*([0-9]+\s*万円)/]);
+ const holiday=firstMatch(axis+'\n'+text,[/(週休\s*2日[^\n／。]*)/,/(日曜休み[^\n／。]*)/,/(休日重視)/]);
+ const hours=firstMatch(axis+'\n'+text,[/(朝早い勤務希望[^\n。]*)/,/(\d{1,2}:\d{2}\s*[～〜-]\s*\d{1,2}:\d{2})/,/(\d{1,2}:\d{2}頃からの勤務も可能)/]);
+ const longDistance= text.match(/長距離は避けたい|長距離.*不可|日帰り配送希望/) ? '長距離は避けたい（中距離・日帰り希望）' : '';
+ const sales = text.match(/営業業務のない|営業.*ない|営業.*不可/) ? '営業なし希望' : (text.match(/法人営業|営業.*経験/) ? '営業経験あり' : '');
+ const desiredJobParts=[sales,longDistance,text.match(/内勤|物流管理/) ? '将来的に内勤・物流管理にも興味あり' : '', axis].filter(Boolean);
+ return {
+  id:firstMatch(text,[/(DR-[0-9]+)/i]) || 'DR-'+Date.now().toString().slice(-5),
+  age:lineValue(text,'年齢'),
+  residence:lineValue(text,'居住地') || firstMatch(text,[/(大阪府|奈良県|京都府|兵庫県|滋賀県|和歌山県|愛知県|東京都|神奈川県|埼玉県|千葉県)[^\n、。]+/]),
+  commuteMethod:lineValue(text,'通勤手段') || (text.includes('車')?'車':''),
+  commuteRaw:rawComm,
+  commuteMinutes:parseMinutes(rawComm||text),
+  desiredArea:firstMatch(rawComm,[/（([^）]*奈良県[^）]*)）/,/(奈良県か大阪市)/]) || rawComm,
+  driverExperience:lineValue(text,'ドライバー経験') || firstMatch(text,[/([軽0-9t・]+ドライバー)/,/([0-9.]+tルート配送)/]),
+  licenses:lineValue(text,'保有免許・資格') || lineValue(text,'保有免許'),
+  currentJob:lineValue(text,'現職（前職）の仕事内容') || lineValue(text,'前職'),
+  currentIncome:lineValue(text,'現在（前職）の収入'),
+  desiredSalary:desiredSalary,
+  desiredHoliday:holiday,
+  desiredWorkHours:hours,
+  desiredJob:desiredJobParts.join(' / '),
+  cargoOk:firstMatch(text,[/手積み・手降ろし[：:]\s*([^\n]+)/,/手積み.*対応可能/]) || '',
+  longDistance:longDistance,
+  jobChangeTiming:lineValue(text,'希望の転職時期'),
+  interviewAvailability:lineValue(text,'面接可能日程'),
+  other:other,
+  summary:''
+ };
 }
-function deleteCompany(companyId, baseId){ companies=companies.filter(c=>!(c.companyId===companyId&&c.baseId===baseId)); saveLocal(STORAGE_KEYS.companies,companies); render(); }
-
-function starString(n){ let s=''; for(let i=0;i<5;i++) s += i<n ? '★' : '<span class="off">☆</span>'; return s; }
-function renderResultsTab(){
-  const holder=document.createElement('div');
-  if(!candidates.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'候補者が未登録です。まず「①候補者を貼り付け」から登録してください。'})); return holder; }
-  if(!companies.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'運送会社DBが未登録です。「②運送会社一覧を貼り付け」から登録してください。'})); return holder; }
-  if(!selectedCandidateId) selectedCandidateId=candidates[candidates.length-1].candidateId;
-  const chipRow=document.createElement('div'); chipRow.className='chip-row';
-  candidates.slice().reverse().forEach(c=>{ const chip=document.createElement('div'); chip.className='chip'+(c.candidateId===selectedCandidateId?' active':''); chip.textContent=c.summary||c.candidateId; chip.addEventListener('click',()=>{selectedCandidateId=c.candidateId; render();}); chipRow.appendChild(chip); });
-  holder.appendChild(chipRow);
-  const cand=candidates.find(c=>c.candidateId===selectedCandidateId);
-  const infoPanel=document.createElement('div'); infoPanel.className='panel';
-  infoPanel.innerHTML=`<div style="font-weight:800; margin-bottom:6px;">${esc(cand.summary||cand.candidateId)}</div><div class="hint">居住地: ${esc(cand.residence||'—')} ／ 通勤条件: ${esc(cand.commuteRaw||'—')} ／ 通勤可能エリア: ${esc((cand.commutableAreas||[]).join('、')||'—')}</div>`;
-  holder.appendChild(infoPanel);
-  const results=computeMatchesFor(cand);
-  if(!results.length){ holder.appendChild(Object.assign(document.createElement('div'),{className:'panel empty', textContent:'マッチング対象の会社がありません。'})); return holder; }
-  results.forEach(r=>{
-    const card=document.createElement('div'); card.className='match-card';
-    card.innerHTML=`<div class="head"><div><div class="name">${esc(r.companyName||'(会社名不明)')} — ${esc(r.baseName||'')}</div><div class="addr">${esc(r.address||'')}</div></div><div style="text-align:right;"><div class="stars">${starString(r.stars)}</div><div class="pct">マッチ度 ${r.pct}%</div></div></div><div class="tags">${r.matchedPoints.map(p=>`<span class="tag good">✓ ${esc(p)}</span>`).join('')}${r.concerns.map(p=>`<span class="tag warn">△ ${esc(p)}</span>`).join('')}</div>`;
-    holder.appendChild(card);
-  });
-  return holder;
+function makeSummary(c){
+ const parts=[];
+ if(c.id)parts.push(c.id);
+ if(c.residence)parts.push(c.residence);
+ if(c.licenses)parts.push(c.licenses);
+ if(c.driverExperience)parts.push(c.driverExperience);
+ if(c.commuteMinutes)parts.push('車'+c.commuteMinutes+'分圏内');
+ if(c.cargoOk)parts.push('手積み可');
+ if(c.desiredSalary)parts.push('希望'+c.desiredSalary);
+ return parts.join('／');
 }
-function render(){ renderNav(); const main=document.getElementById('main'); main.innerHTML=''; main.appendChild(currentTab==='candidate'?renderCandidateTab():currentTab==='company'?renderCompanyTab():renderResultsTab()); }
-function init(){ companies=loadLocal(STORAGE_KEYS.companies,[]); candidates=loadLocal(STORAGE_KEYS.candidates,[]); render(); }
-init();
+function renderFields(c){
+ currentCandidate=c; const wrap=document.getElementById('candidateFields'); wrap.innerHTML='';
+ candidateKeys.forEach(([k,label])=>{const d=document.createElement('div');d.className='field';d.innerHTML=`<label>${label}</label><input data-k="${k}" value="${esc(c[k]||'')}">`;wrap.appendChild(d)});
+}
+function collectFields(){const o={};document.querySelectorAll('#candidateFields input').forEach(i=>o[i.dataset.k]=i.value.trim());if(!o.summary)o.summary=makeSummary(o);return o}
+function renderCandidateList(){
+ const box=document.getElementById('candidateList'); const sel=document.getElementById('candidateSelect');
+ if(sel){sel.innerHTML=candidates.map((c,i)=>`<option value="${i}">${esc(c.summary||c.id||('候補者'+(i+1)))}</option>`).join('')}
+ if(!candidates.length){box.innerHTML='まだ保存されていません。';return}
+ box.innerHTML=candidates.map((c,i)=>`<div class="card"><b>${esc(c.summary||c.id)}</b><div class="small">${esc(c.residence)} / ${esc(c.licenses)} / ${esc(c.driverExperience)}</div><button class="btn" onclick="deleteCandidate(${i})">削除</button></div>`).join('')
+}
+window.deleteCandidate=i=>{candidates.splice(i,1);save(LS_CAND,candidates);renderCandidateList()}
+function parseCompanies(raw){
+ const lines=raw.split(/\n/).map(x=>x.trim()).filter(Boolean); const out=[];
+ lines.forEach(line=>{
+  if(/会社名|住所|必要免許/.test(line)&&/\t|,/.test(line))return;
+  const cols=line.split(/\t|,/).map(val);
+  let c={companyName:'',address:'',license:'',vehicles:'',job:'',holiday:'',salary:''};
+  if(cols.length>=3){[c.companyName,c.address,c.license,c.vehicles,c.job,c.holiday,c.salary]=cols}
+  else{c.companyName=cols[0]||'';c.address=firstMatch(line,[/((?:大阪府|奈良県|京都府|兵庫県|滋賀県|和歌山県|愛知県|東京都)[^\s,、]+)/]);c.license=firstMatch(line,[/(普通免許[^\s,、]*)/,/(準中型[^\s,、]*)/,/(中型免許[^\s,、]*)/,/(大型免許[^\s,、]*)/]);c.vehicles=firstMatch(line,[/([軽0-9t・]+車?)/]);c.job=firstMatch(line,[/(地場配送|ルート配送|中距離|長距離|センター配送)/]);}
+  if(c.companyName||c.address)out.push(c)
+ });
+ return out;
+}
+function renderCompanyList(){
+ const box=document.getElementById('companyList');
+ if(!companies.length){box.innerHTML='<div class="hint">まだ保存されていません。</div>';return}
+ box.innerHTML=`<table><thead><tr><th>会社名</th><th>住所</th><th>免許</th><th>車種</th><th>仕事内容</th><th>休日</th><th>給与</th><th></th></tr></thead><tbody>`+companies.map((c,i)=>`<tr><td>${esc(c.companyName)}</td><td>${esc(c.address)}</td><td>${esc(c.license)}</td><td>${esc(c.vehicles)}</td><td>${esc(c.job)}</td><td>${esc(c.holiday)}</td><td>${esc(c.salary)}</td><td><button class="btn" onclick="deleteCompany(${i})">削除</button></td></tr>`).join('')+'</tbody></table>'
+}
+window.deleteCompany=i=>{companies.splice(i,1);save(LS_COMP,companies);renderCompanyList()}
+function score(cand,comp){
+ let s=0, good=[], warn=[];
+ if(cand.residence&&comp.address){const cp=prefCity(cand.residence), bp=prefCity(comp.address); if(cp.pref&&bp.pref&&cp.pref===bp.pref){s+=30;good.push('同一府県')} if(cp.city&&bp.city&&cp.city===bp.city){s+=25;good.push('同一市区町村')}}
+ if(cand.licenses&&comp.license){ if(licenseOk(cand.licenses,comp.license)){s+=25;good.push('免許条件OK')} else warn.push('免許要確認') }
+ if(cand.driverExperience&&comp.vehicles){ if(overlapWords(cand.driverExperience,comp.vehicles)){s+=15;good.push('経験車種が近い')} }
+ if(cand.desiredHoliday&&comp.holiday&&overlapWords(cand.desiredHoliday,comp.holiday)){s+=10;good.push('休日条件が近い')}
+ if(cand.desiredSalary&&comp.salary){s+=5;good.push('給与条件は要確認')}
+ if(cand.longDistance&&/長距離/.test(comp.job))warn.push('長距離は避けたい希望あり');
+ return {pct:Math.min(100,s),good,warn};
+}
+function prefCity(a){const m=a.match(/(北海道|東京都|大阪府|京都府|.{2,3}県)([^市区町村\s　]+[市区町村])?/);return {pref:m?m[1]:'',city:m&&m[2]?m[2]:''}}
+function licenseOk(have,req){ if(!req)return true; if(have.includes('8t限定')&&/(普通|準中型|2t|4t|8t)/.test(req))return true; if(have.includes('5t限定')&&/(普通|準中型|2t|5t|1.5t)/.test(req))return true; return overlapWords(have,req)}
+function overlapWords(a,b){const wa=a.split(/[、・\/\s（）()]+/).filter(x=>x.length>1), wb=b.split(/[、・\/\s（）()]+/).filter(x=>x.length>1);return wa.some(x=>wb.some(y=>x.includes(y)||y.includes(x)))}
+function runMatch(){
+ const i=document.getElementById('candidateSelect').value; const cand=candidates[i]; const box=document.getElementById('matchResults');
+ if(!cand||!companies.length){box.innerHTML='<div class="panel hint">候補者または運送会社を登録してください。</div>';return}
+ const rows=companies.map(comp=>({comp,...score(cand,comp)})).sort((a,b)=>b.pct-a.pct);
+ box.innerHTML=rows.map(r=>`<div class="card"><b>${esc(r.comp.companyName||'会社名なし')}</b><span class="tag good">${r.pct}%</span><div class="small">${esc(r.comp.address)}</div><div>${r.good.map(x=>`<span class="tag good">✓ ${esc(x)}</span>`).join('')}${r.warn.map(x=>`<span class="tag warn">△ ${esc(x)}</span>`).join('')}</div></div>`).join('')
+}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.tabBody').forEach(x=>x.style.display='none');document.getElementById(b.dataset.tab).style.display='block';renderCandidateList();renderCompanyList()});
+document.getElementById('parseBtn').onclick=()=>{const raw=document.getElementById('rawCandidate').value;const c=parseCandidate(raw);c.summary=makeSummary(c);renderFields(c);document.getElementById('parseStatus').innerHTML='<span class="ok">解析しました。必要に応じて修正して保存してください。</span>'};
+document.getElementById('clearBtn').onclick=()=>{document.getElementById('rawCandidate').value='';renderFields({})};
+document.getElementById('saveCandidateBtn').onclick=()=>{const c=collectFields();candidates.push(c);save(LS_CAND,candidates);renderCandidateList();alert('保存しました')};
+document.getElementById('copySummaryBtn').onclick=async()=>{const c=collectFields();const txt=candidateKeys.map(([k,l])=>c[k]?`${l}：${c[k]}`:'').filter(Boolean).join('\n');await navigator.clipboard.writeText(txt);alert('コピーしました')};
+document.getElementById('importCompanyBtn').onclick=()=>{companies=companies.concat(parseCompanies(document.getElementById('rawCompany').value));save(LS_COMP,companies);renderCompanyList();alert('取り込みました')};
+document.getElementById('matchBtn').onclick=runMatch;
+renderFields({});renderCandidateList();renderCompanyList();
 </script>
 </body>
 </html>
